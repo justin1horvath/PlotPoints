@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plot Point</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <h1>Plot Point</h1>
+      </header>
+      <main>
+        <section class="hero-panel">
+          <button id="start-story-button" class="action-button">
+            Start New Story
+          </button>
+          <div id="phase-display" class="phase-display">
+            Current phase: None
+          </div>
+        </section>
+
+        <section class="scoreboard">
+          <h2>Scoreboard</h2>
+          <div class="score-row">
+            <span>Romance Score</span>
+            <span id="romance-score">0</span>
+          </div>
+          <div class="score-row">
+            <span>Player 1 Plot Points</span>
+            <span id="player1-points">0</span>
+          </div>
+          <div class="score-row">
+            <span>Player 2 Plot Points</span>
+            <span id="player2-points">0</span>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
