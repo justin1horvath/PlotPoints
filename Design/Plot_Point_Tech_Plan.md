@@ -25,7 +25,7 @@ No accounts. No multiplayer sync. No database. One device, one URL.
 | App code | Plain HTML / CSS / JavaScript | Free |
 | Hosting | GitHub Pages | Free |
 | AI Game Master (secure) | Cloudflare Worker | Free |
-| Claude API | Anthropic | ~$0.02–0.05 per game |
+| OpenAI API | OpenAI | Usage-based; start with a low-cost model |
 
 That's it. Four things.
 
@@ -38,10 +38,10 @@ No frameworks, no build tools, no install step. You write files, open them in a 
 Push your code to a GitHub repo, enable Pages in settings, and your app is live at `yourusername.github.io/plot-point`. Free forever. No server to manage.
 
 ### 3. Cloudflare Worker
-A 15-line script that lives in the cloud. Your app sends it the game context; it adds your Claude API key and forwards the request to Claude; it returns the response. This is the only reason it exists — to keep your API key out of your JavaScript files where anyone could find it.
+A small script that lives in the cloud. Your app sends it the game context; it adds your OpenAI API key and forwards the request to OpenAI; it returns the response. This is the only reason it exists — to keep your API key out of your JavaScript files where anyone could find it.
 
-### 4. Claude API
-The AI Game Master. You send it a prompt describing the current game state and it returns narration, scene setups, woven Mad Libs text, and plot twist rewrites. Model: `claude-sonnet-4-5`.
+### 4. OpenAI API
+The AI Game Master. You send it a prompt describing the current game state and it returns narration, scene setups, woven Mad Libs text, and plot twist rewrites. Start with a cost-conscious model such as `gpt-5.4-mini`; upgrade later if the prose needs more nuance.
 
 ---
 
@@ -61,7 +61,7 @@ ONE DEVICE (browser)
   (holds API key securely)
        |
        ↓
-  CLAUDE API
+  OPENAI API
   (generates scenes, narration, Mad Libs, twists)
 ```
 
@@ -75,22 +75,20 @@ ONE DEVICE (browser)
 plot-point/
 │
 ├── index.html          ← Homepage (Start Game button)
-├── game.html           ← Main game screen (all scenes play here)
+├── styles.css          ← Global styles
 │
-├── css/
-│   ├── main.css        ← Global styles
-│   ├── game.css        ← Game screen styles
-│   └── slots.css       ← Slot machine animation
-│
-├── js/
+├── src/
 │   ├── state.js        ← All game state (one object, lives in memory)
-│   ├── ai.js           ← Calls to Cloudflare Worker (Claude)
+│   ├── ai.js           ← Calls to Cloudflare Worker (OpenAI)
 │   ├── scenes.js       ← Scene loop logic (setup→madlibs→reveal→choice→rolloff→result)
-│   ├── slots.js        ← Slot machine mechanics and animation
-│   └── ui.js           ← DOM updates, screen transitions, private/shared toggling
+│   ├── rolls.js        ← Roll-off mechanics
+│   └── app.js          ← App initialization and event wiring
+│
+├── settings/
+│   └── default-setting.md ← Default genre/world source material
 │
 └── worker/
-    └── claude-proxy.js ← Cloudflare Worker script (deployed separately)
+    └── openai-proxy.js ← Cloudflare Worker script (deployed separately)
 ```
 
 ---
@@ -142,14 +140,26 @@ const gameState = {
 
 ## The Cloudflare Worker (Full Script)
 
-Paste this into the Cloudflare Workers dashboard. Set `CLAUDE_API_KEY` as an environment variable. Done.
+Paste this into the Cloudflare Workers dashboard. Set `OPENAI_API_KEY` as an environment variable. Replace `https://yourusername.github.io` with the GitHub Pages origin for this project after Pages is enabled.
 
 ```javascript
 export default {
   async fetch(request, env) {
+    const allowedOrigins = new Set([
+      "https://justin1horvath.github.io",
+      "http://localhost:5500",
+      "http://127.0.0.1:5500",
+      "http://localhost:8000",
+      "http://127.0.0.1:8000",
+      "null",
+    ]);
+    const requestOrigin = request.headers.get("Origin") || "null";
+    const allowOrigin = allowedOrigins.has(requestOrigin)
+      ? requestOrigin
+      : "https://justin1horvath.github.io";
 
     const corsHeaders = {
-      "Access-Control-Allow-Origin": "https://yourusername.github.io",
+      "Access-Control-Allow-Origin": allowOrigin,
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     };
@@ -159,28 +169,50 @@ export default {
     }
 
     const body = await request.json();
+    const prompt = body.prompt || "Say hello from the Plot Point AI Game Master.";
+    const system = body.system || "You are the AI Game Master for Plot Point.";
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
-        "x-api-key": env.CLAUDE_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1024,
-        messages: body.messages,
-        system: body.system,
+        model: body.model || "gpt-5.4-mini",
+        instructions: system,
+        input: prompt,
+        max_output_tokens: body.maxOutputTokens || 300,
       }),
     });
 
     const data = await response.json();
-    return new Response(JSON.stringify(data), {
+    const text = extractResponseText(data);
+
+    return new Response(JSON.stringify({ text, data }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: response.ok ? 200 : response.status,
     });
   },
 };
+
+function extractResponseText(data) {
+  if (typeof data.output_text === "string" && data.output_text.length > 0) {
+    return data.output_text;
+  }
+
+  const output = Array.isArray(data.output) ? data.output : [];
+  for (const item of output) {
+    const content = Array.isArray(item.content) ? item.content : [];
+    for (const part of content) {
+      if (typeof part.text === "string" && part.text.length > 0) {
+        return part.text;
+      }
+    }
+  }
+
+  return "";
+}
 ```
 
 ---
@@ -193,12 +225,14 @@ export default {
 1. Create a GitHub repo called `plot-point`
 2. Create `index.html` — a "Start Game" button, the game title, a brief description
 3. Enable GitHub Pages → app is live at your GitHub URL
-4. Deploy the Cloudflare Worker → test it returns a response from Claude
-5. Write `js/state.js` with the game state object above
-6. Write `js/ai.js` with a single function `callClaude(system, messages)` that posts to your Worker URL and returns the response text
+4. Deploy the Cloudflare Worker → test it returns a response from OpenAI
+5. Write `src/state.js` with the game state object above
+6. Write `src/ai.js` with a single function `callOpenAI(system, prompt)` that posts to your Worker URL and returns the response text
 
 **Prompt for your AI coding assistant**:
-> "I'm building a plain JavaScript web app with no frameworks. Write a function called `callClaude(system, messages)` in `js/ai.js`. It should POST to `https://my-worker.workers.dev` with a JSON body containing `system` (a string) and `messages` (an array of `{role, content}` objects). It should return the response text from Claude. Handle errors by logging them and returning null."
+> "I'm building a plain JavaScript web app with no frameworks. Write a function called `callOpenAI(system, prompt)` in `src/ai.js`. It should POST to `https://my-worker.workers.dev` with a JSON body containing `system` and `prompt`, both strings. It should return the response text from OpenAI. Handle errors by logging them and returning null."
+
+**Local testing note**: Because the app uses JavaScript modules, test locally with VS Code's Live Server extension or another local web server. Do not test by double-clicking `index.html` and opening it as a `file://` URL; browser module/CORS rules can prevent the app from running.
 
 ---
 
@@ -207,8 +241,8 @@ export default {
 
 1. Build a 4-step form in `game.html` — one question per screen, large text input
 2. Add a "Pass the device to Player 2" interstitial screen between the two players' inputs — screen goes blank so Player 1's answers aren't visible
-3. On completion, call Claude with both characters' answers
-4. Claude returns: name, physical detail, stats (one 2, two 3s, one 4), 3-sentence portrait for each player
+3. On completion, call OpenAI with both characters' answers
+4. OpenAI returns: name, physical detail, stats (one 2, two 3s, one 4), 3-sentence portrait for each player
 5. Store everything in `gameState.players`
 6. Show both portraits on screen simultaneously — "Begin" button starts the game
 
@@ -228,10 +262,10 @@ function showPassScreen(message, onConfirm) {
 **Goal**: AI generates scenes, players submit Mad Libs privately, scene is revealed together.
 
 1. Build the scene state machine in `scenes.js`: `setup → madlibs_p1 → pass → madlibs_p2 → pass → reveal → choice → rolloff → result → next`
-2. `setup`: call Claude with scene number + game state → returns location, challenge, goals
+2. `setup`: call OpenAI with scene number + game state → returns location, challenge, goals
 3. `madlibs_p1`: Player 1 privately enters word, NPC, action, something funny → pass screen
 4. `madlibs_p2`: Player 2 does the same → pass screen
-5. Call Claude with all 8 inputs + scene context → returns woven narrative ending in a dilemma
+5. Call OpenAI with all 8 inputs + scene context → returns woven narrative ending in a dilemma
 6. `reveal`: full narrative displayed, read aloud together
 7. `choice`: two buttons, each showing the relevant stat and what's at stake
 
@@ -258,8 +292,8 @@ function showPassScreen(message, onConfirm) {
 
 1. After each roll result, check for three identical non-CLUE icons
 2. If triggered: show 10 twist options from the GDD; active player picks one
-3. Call Claude with the twist + scene context → rewritten scene ending; store twist in `gameState.plotTwists`
-4. Scene 12 (Free Write): Player 1 types privately → pass → Player 2 types → call Claude → shared narrative
+3. Call OpenAI with the twist + scene context → rewritten scene ending; store twist in `gameState.plotTwists`
+4. Scene 12 (Free Write): Player 1 types privately → pass → Player 2 types → call OpenAI → shared narrative
 5. Scene 14 (The Declaration): full-screen prompt for each player to speak aloud; "We said it" confirm button
 6. End screen: romance score → ending type, plot point winner
 
@@ -271,7 +305,7 @@ function showPassScreen(message, onConfirm) {
 - Sound: ambient music + reel click sounds using the Web Audio API
 - Mobile layout — large tap targets, readable text on a phone screen
 - Setting swap: load a different `setting.js` file to change genre/world
-- Error handling: if the Claude call fails, show a retry button
+- Error handling: if the OpenAI call fails, show a retry button
 - "Start Over" button that resets `gameState` and returns to the homepage
 
 ---
@@ -280,7 +314,7 @@ function showPassScreen(message, onConfirm) {
 
 **Lead with your stack**: Always open with — *"I'm building a plain JavaScript web app with no frameworks. Vanilla JS only."* Otherwise Codex will reach for React or Node.
 
-**Reference your existing files**: *"I already have `js/state.js` which exports a `gameState` object and `js/ai.js` which exports `callClaude()`. Now write..."*
+**Reference your existing files**: *"I already have `src/state.js` which exports a `state` object and `src/ai.js` which exports `callOpenAI()`. Now write..."*
 
 **One function at a time**: Build and test one thing, then move on.
 
@@ -292,15 +326,15 @@ function showPassScreen(message, onConfirm) {
 
 ## First Steps This Week
 
-1. **Create accounts**: GitHub, Cloudflare, Anthropic (console.anthropic.com)
+1. **Create accounts**: GitHub, Cloudflare, OpenAI Platform
 2. **Create a GitHub repo** called `plot-point`
 3. **Create `index.html`** with just the title and a Start button
 4. **Enable GitHub Pages** — your page is live
-5. **Deploy the Cloudflare Worker** — paste the script above, add your Claude API key
-6. **Test the connection**: write a quick `callClaude()` call that sends "say hello" and logs the response
+5. **Deploy the Cloudflare Worker** — paste the script above, add your OpenAI API key as `OPENAI_API_KEY`
+6. **Test the connection**: write a quick `callOpenAI()` call that sends "say hello" and logs the response
 7. Start Phase 1
 
 ---
 
-*Tech Plan v0.3 — May 2026 — Single-device, no database*
+*Tech Plan v0.4 — May 2026 — Single-device, no database, OpenAI API*
 *Paired with: Plot_Point_Game_Design_Document.md v0.1*

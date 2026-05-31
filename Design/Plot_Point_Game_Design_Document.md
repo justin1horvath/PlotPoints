@@ -11,6 +11,9 @@ Plot Point is a two-player in-person storytelling game where players collaborate
 **Device & Play Format**
 Plot Point is a single-device game. Both players share one phone, tablet, or laptop throughout the session. The device is passed between players when private input is needed — character creation answers, Mad Libs inputs, and the Free Write are each entered on the device privately before it is handed back or turned to face the table. All shared screens (scene reveals, the scoreboard, roll-offs, and the Declaration) are read together. No second screen, app install, or account is required to play.
 
+**Current Web Implementation Note**
+The website version uses an AI Game Master powered by the OpenAI API. The API key is never stored in the browser app; instead, the static JavaScript app calls a small Cloudflare Worker, and the Worker securely forwards AI requests to OpenAI.
+
 ---
 
 ## Core Philosophy

@@ -63,8 +63,19 @@ body {
 }
 
 .phase-display {
+  margin-bottom: 12px;
   font-size: 1rem;
   color: #5a4033;
+}
+
+.ai-test-output {
+  min-height: 52px;
+  padding: 12px;
+  border: 1px solid #f1e2db;
+  border-radius: 10px;
+  background: #fff8f3;
+  color: #4a3329;
+  line-height: 1.45;
 }
 
 .scoreboard h2 {

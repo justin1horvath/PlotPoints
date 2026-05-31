@@ -2,20 +2,29 @@ import { resetState, state } from "./state.js";
 import { renderPhase, renderScoreboard } from "./scenes.js";
 import { getAIReply } from "./ai.js";
 
-const startButton = document.createElement("button");
-
 function onStartNewStory() {
   resetState();
   state.phase = "Opening Scene";
   renderPhase();
   renderScoreboard();
 
-  getAIReply("Start the story")
+  const aiOutput = document.getElementById("ai-test-output");
+  if (aiOutput) {
+    aiOutput.textContent = "Testing OpenAI connection...";
+  }
+
+  getAIReply("Reply with one short sentence welcoming players to Plot Point.")
     .then((response) => {
       console.log("AI stub response:", response);
+      if (aiOutput) {
+        aiOutput.textContent = response;
+      }
     })
     .catch((error) => {
-      console.error("AI stub error:", error);
+      console.error("AI error:", error);
+      if (aiOutput) {
+        aiOutput.textContent = `AI connection failed: ${error.message}`;
+      }
     });
 }
 
