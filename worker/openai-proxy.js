@@ -1,3 +1,4 @@
+// Legacy dashboard-paste Worker. Prefer worker/src/index.js via Wrangler.
 export default {
   async fetch(request, env) {
     const allowedOrigins = new Set([
@@ -33,6 +34,7 @@ export default {
     const body = await request.json();
     const prompt = body.prompt || "Say hello from the Plot Point AI Game Master.";
     const system = body.system || "You are the AI Game Master for Plot Point.";
+    const textOptions = body.textFormat ? { format: body.textFormat } : undefined;
 
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -41,10 +43,11 @@ export default {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: body.model || "gpt-5.4-mini",
+        model: body.model || "gpt-5-mini",
         instructions: system,
         input: prompt,
         max_output_tokens: body.maxOutputTokens || 300,
+        ...(textOptions ? { text: textOptions } : {}),
       }),
     });
 
@@ -58,6 +61,7 @@ export default {
   },
 };
 
+// Pulls the assistant's text out of OpenAI's response object.
 function extractResponseText(data) {
   if (typeof data.output_text === "string" && data.output_text.length > 0) {
     return data.output_text;

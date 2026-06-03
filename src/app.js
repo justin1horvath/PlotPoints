@@ -1,33 +1,14 @@
 import { resetState, state } from "./state.js";
 import { renderPhase, renderScoreboard } from "./scenes.js";
-import { getAIReply } from "./ai.js";
+import { startCharacterCreation } from "./characters.js";
 
+// Starts a fresh game and moves immediately into private character creation.
 function onStartNewStory() {
   resetState();
-  state.phase = "Opening Scene";
-  renderPhase();
-  renderScoreboard();
-
-  const aiOutput = document.getElementById("ai-test-output");
-  if (aiOutput) {
-    aiOutput.textContent = "Testing OpenAI connection...";
-  }
-
-  getAIReply("Reply with one short sentence welcoming players to Plot Point.")
-    .then((response) => {
-      console.log("AI stub response:", response);
-      if (aiOutput) {
-        aiOutput.textContent = response;
-      }
-    })
-    .catch((error) => {
-      console.error("AI error:", error);
-      if (aiOutput) {
-        aiOutput.textContent = `AI connection failed: ${error.message}`;
-      }
-    });
+  startCharacterCreation();
 }
 
+// Connects page buttons to JavaScript functions after the HTML has loaded.
 function attachEventListeners() {
   const button = document.getElementById("start-story-button");
   if (button) {
@@ -35,6 +16,7 @@ function attachEventListeners() {
   }
 }
 
+// Sets up the first visible page state when the browser opens the app.
 function initializeApp() {
   renderPhase();
   renderScoreboard();

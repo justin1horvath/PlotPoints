@@ -24,10 +24,11 @@ No accounts. No multiplayer sync. No database. One device, one URL.
 |---|---|---|
 | App code | Plain HTML / CSS / JavaScript | Free |
 | Hosting | GitHub Pages | Free |
-| AI Game Master (secure) | Cloudflare Worker | Free |
-| OpenAI API | OpenAI | Usage-based; start with a low-cost model |
+| AI Game Master proxy | Cloudflare Worker + Wrangler | Free |
+| Structured output validation | Zod | Free |
+| First AI provider | OpenAI API | Usage-based; start with a low-cost model |
 
-That's it. Four things.
+Still intentionally small: static browser app, one Worker, one validation library, one first AI provider.
 
 ---
 
@@ -38,10 +39,15 @@ No frameworks, no build tools, no install step. You write files, open them in a 
 Push your code to a GitHub repo, enable Pages in settings, and your app is live at `yourusername.github.io/plot-point`. Free forever. No server to manage.
 
 ### 3. Cloudflare Worker
-A small script that lives in the cloud. Your app sends it the game context; it adds your OpenAI API key and forwards the request to OpenAI; it returns the response. This is the only reason it exists — to keep your API key out of your JavaScript files where anyone could find it.
+A small script that lives in the cloud. Your app sends it the game context; it adds the private provider API key and forwards the request to the selected AI provider; it returns validated data. This keeps API keys out of browser JavaScript and gives us one place to swap providers later.
 
-### 4. OpenAI API
-The AI Game Master. You send it a prompt describing the current game state and it returns narration, scene setups, woven Mad Libs text, and plot twist rewrites. Start with a cost-conscious model such as `gpt-5.4-mini`; upgrade later if the prose needs more nuance.
+The Worker should be managed locally with Cloudflare Wrangler once npm libraries are needed. This allows the Worker to use packages such as `openai` and `zod`, instead of pasting all code into the Cloudflare dashboard.
+
+### 4. Zod
+Zod defines the exact shape of data the app expects from AI calls. It validates character data, scene data, story log entries, choices, and future structured outputs. Zod is provider-neutral: OpenAI, Anthropic, Gemini, or another provider can all be adapted to return the same Zod-validated shapes.
+
+### 5. OpenAI API
+The first AI provider. You send it a prompt describing the current game state and it returns narration, scene setups, woven Mad Libs text, and plot twist rewrites. Start with a cost-conscious model; upgrade later if the prose needs more nuance.
 
 ---
 
@@ -58,11 +64,11 @@ ONE DEVICE (browser)
        | (when AI narration is needed)
        ↓
   CLOUDFLARE WORKER
-  (holds API key securely)
+  (holds API key securely, validates output)
        |
        ↓
-  OPENAI API
-  (generates scenes, narration, Mad Libs, twists)
+  AI PROVIDER
+  (OpenAI first; adapter can change later)
 ```
 
 **Private inputs**: When a player needs to enter something privately (character answers, Mad Libs, Free Write), the app shows only that player's input field. After they submit, the screen clears before the device is handed to the other player. The other player never sees the raw input — only what the AI incorporates into the narrative.
@@ -79,7 +85,9 @@ plot-point/
 │
 ├── src/
 │   ├── state.js        ← All game state (one object, lives in memory)
-│   ├── ai.js           ← Calls to Cloudflare Worker (OpenAI)
+│   ├── ai.js           ← Calls to Cloudflare Worker (provider-neutral)
+│   ├── promptBuilder.js ← Assembles reusable OpenAI prompts (planned)
+│   ├── sceneBlueprints.js ← Scene-by-scene AI instructions (planned)
 │   ├── scenes.js       ← Scene loop logic (setup→madlibs→reveal→choice→rolloff→result)
 │   ├── rolls.js        ← Roll-off mechanics
 │   └── app.js          ← App initialization and event wiring
@@ -88,8 +96,223 @@ plot-point/
 │   └── default-setting.md ← Default genre/world source material
 │
 └── worker/
-    └── openai-proxy.js ← Cloudflare Worker script (deployed separately)
+    ├── index.js        ← Cloudflare Worker entrypoint (planned Wrangler project)
+    ├── providers/
+    │   ├── openaiProvider.js
+    │   ├── anthropicProvider.js
+    │   └── geminiProvider.js
+    └── schemas/
+        ├── characterSchema.js
+        └── sceneSchema.js
 ```
+
+---
+
+## AI Prompt Architecture
+
+The game should not hide major prompt logic inside one-off functions forever. Each AI request should be assembled from predictable parts so the story stays controllable, debuggable, and expandable across all 14 scenes.
+
+### Prompt Inputs
+
+Every scene-generation prompt should be built from five sources:
+
+1. **Story Bible**
+   - Lives in `settings/default-setting.md`.
+   - Defines genre, tone, world details, magic/tech level, romance style, content boundaries, recurring motifs, possible locations, and possible antagonists.
+   - Included in major AI calls so the model writes in the correct world.
+
+2. **Character State**
+   - Lives in `state.players`.
+   - Includes private creation answers, generated names, physical details, stats, and eventually public bios/private notes.
+   - Private wounds and wants may be passed to the model, but prompts must instruct the model not to reveal them directly unless the scene calls for it.
+
+3. **Story So Far**
+   - Lives in `state.storyLog`.
+   - Should be compact structured memory, not the full text of every scene.
+   - Each completed scene should store a summary, emotional shift, important facts, unresolved threads, and romance beat.
+   - Preferred strategy: ask OpenAI to return a `storyLogEntry` as part of the same scene-generation response. This avoids an extra summary API call while still preserving emotional continuity.
+
+4. **Scene Blueprint**
+   - Planned file: `src/sceneBlueprints.js`.
+   - Defines what the current scene number is supposed to do.
+   - Includes act, scene name, purpose, tone, must-include beats, must-avoid constraints, and whether the characters meet, face a challenge, or reveal something.
+
+5. **Player Inputs**
+   - Lives in `state.currentSceneData.madLibsInputs`.
+   - Includes the blind Mad Libs words supplied privately by each player.
+   - Later scenes may also include choices, Free Write text, plot twist selections, and clue spending.
+
+### Prompt Builder
+
+Planned file: `src/promptBuilder.js`.
+
+This file should assemble prompts instead of letting each scene function hand-write a full prompt. The goal is a reusable function like:
+
+```javascript
+buildScenePrompt({
+  storyBible,
+  players,
+  storyLog,
+  sceneBlueprint,
+  madLibsInputs,
+});
+```
+
+The assembled prompt should use clear sections:
+
+```text
+SYSTEM ROLE
+You are the AI Game Master for Plot Point...
+
+STORY BIBLE
+[setting/default-setting.md]
+
+CHARACTERS
+[public character data + private emotional hooks]
+
+STORY SO FAR
+[compact scene summaries]
+
+CURRENT SCENE BLUEPRINT
+[scene number, purpose, tone, must include, must avoid]
+
+PLAYER MAD LIBS
+[player 1 inputs]
+[player 2 inputs]
+
+OUTPUT FORMAT
+Return strict JSON only...
+```
+
+### Structured Output Contracts
+
+The app should use Zod schemas as the source of truth for structured AI responses. A prompt describes the creative task; a Zod schema defines the required data shape.
+
+Example scene schema:
+
+```javascript
+const SceneSchema = z.object({
+  title: z.string(),
+  location: z.string(),
+  setup: z.string(),
+  goals: z.object({
+    player1: z.string(),
+    player2: z.string(),
+  }),
+  narrative: z.string(),
+  storyLogEntry: z.object({
+    summary: z.string(),
+    emotionalShift: z.string(),
+    unresolvedThreads: z.array(z.string()),
+    importantFacts: z.array(z.string()),
+    romanceBeat: z.string(),
+  }),
+});
+```
+
+Zod should be used to:
+
+- Define the expected response shape for each AI task.
+- Validate model output before storing it in game state.
+- Produce clearer errors when a response is missing required fields.
+- Keep response contracts provider-neutral.
+
+Structured JSON responses need enough output budget to finish the full object. Current targets are roughly 1,500 output tokens for character generation and 3,000 output tokens for scene generation. If errors mention unterminated strings or truncated JSON, increase the relevant `max_output_tokens` before changing the schema.
+
+### AI Provider Adapter
+
+The browser app should not call OpenAI-specific behavior directly. It should call one stable Worker endpoint with a task name and payload:
+
+```javascript
+POST /generate
+{
+  "task": "generate_scene",
+  "payload": { ... }
+}
+```
+
+The Worker should return the same shape regardless of provider:
+
+```javascript
+{
+  "ok": true,
+  "data": { ...validated scene object... }
+}
+```
+
+Provider-specific code should live behind adapters:
+
+```text
+worker/
+  providers/
+    openaiProvider.js
+    anthropicProvider.js
+    geminiProvider.js
+```
+
+Each provider adapter should implement the same app-facing functions:
+
+```javascript
+generateCharacter(input)
+generateScene(input)
+```
+
+OpenAI is the first provider. Its adapter can use the OpenAI JavaScript SDK and Zod helpers. If the project later switches to Anthropic, Gemini, or another provider, only the provider adapter should change; browser UI, game state, scene blueprints, and prompt builder should remain stable.
+
+### AI Call Log
+
+For debugging and tuning, each model call should eventually be stored in memory:
+
+```javascript
+aiLog: [
+  {
+    type: "scene_generation",
+    sceneNumber: 1,
+    promptSent: "...",
+    responseReceived: "...",
+    parsedData: {},
+    createdAt: "2026-05-31T12:00:00.000Z"
+  }
+]
+```
+
+This lets us answer:
+
+- What exactly did the app send to OpenAI?
+- What did OpenAI return?
+- What did the app successfully parse?
+- Why did a scene feel wrong or fail?
+
+For now, `aiLog` can live in memory only. Later, it can be shown on a debug screen or saved to `localStorage`.
+
+### Design Rule
+
+Use one reusable scene prompt builder plus scene blueprints, not fourteen unrelated scene prompts. Scene-specific flavor should live in blueprints; shared formatting, memory, safety, and output instructions should live in the prompt builder.
+
+### Current Story Summary Plan
+
+Scene 1 now asks OpenAI to return scene content and story memory in one JSON response:
+
+```javascript
+{
+  title: "",
+  location: "",
+  setup: "",
+  goals: { player1: "", player2: "" },
+  narrative: "",
+  storyLogEntry: {
+    summary: "",
+    emotionalShift: "",
+    unresolvedThreads: [],
+    importantFacts: [],
+    romanceBeat: ""
+  }
+}
+```
+
+The app stores `storyLogEntry` in `state.storyLog` and adds mechanical result fields itself. This gives future prompts story continuity without making a separate summarization request.
+
+The prototype now routes browser AI calls through provider-neutral task names. The intended next architecture is to deploy the Wrangler-managed Worker so schemas and provider calls live server-side using Zod. Prompts can still describe the desired creative behavior, but Zod should enforce the response shape for character generation, scene generation, and future scene summaries.
 
 ---
 
@@ -104,7 +327,7 @@ const gameState = {
     {
       number: 1,
       role: "", gift: "", wound: "", want: "",   // private creation answers
-      name: "", portrait: "", physicalDetail: "", // AI-generated
+      name: "", physicalDetail: "", // AI-generated
       stats: { guts: 0, charm: 0, wit: 0, heart: 0 },
       plotPoints: 0,
       clues: 0
@@ -120,8 +343,10 @@ const gameState = {
   plotTwists: [],           // array of twist objects
 
   // AI memory
-  sceneHistory: [],         // summary of each completed scene
-  systemPrompt: "",         // built once at game start, sent with every AI call
+  storyBible: "",           // loaded from settings/default-setting.md
+  storyLog: [],             // compact summaries of completed scenes
+  aiLog: [],                // prompt/response debugging records
+  systemPrompt: "",         // shared AI GM behavior instructions
 
   // Current scene working data
   currentSceneData: {
@@ -138,82 +363,30 @@ const gameState = {
 
 ---
 
-## The Cloudflare Worker (Full Script)
+## Cloudflare Worker Plan
 
-Paste this into the Cloudflare Workers dashboard. Set `OPENAI_API_KEY` as an environment variable. Replace `https://yourusername.github.io` with the GitHub Pages origin for this project after Pages is enabled.
+The Worker should move from dashboard-pasted code to a local Wrangler-managed Worker project once we use npm libraries. This allows the Worker to install and bundle `openai`, `zod`, and any future provider SDKs.
 
-```javascript
-export default {
-  async fetch(request, env) {
-    const allowedOrigins = new Set([
-      "https://justin1horvath.github.io",
-      "http://localhost:5500",
-      "http://127.0.0.1:5500",
-      "http://localhost:8000",
-      "http://127.0.0.1:8000",
-      "null",
-    ]);
-    const requestOrigin = request.headers.get("Origin") || "null";
-    const allowOrigin = allowedOrigins.has(requestOrigin)
-      ? requestOrigin
-      : "https://justin1horvath.github.io";
+Planned Worker responsibilities:
 
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": allowOrigin,
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    };
+- Receive provider-neutral requests from the browser app.
+- Route each request by task name, such as `generate_character` or `generate_scene`.
+- Build or receive the prompt payload for that task.
+- Call the currently selected provider adapter.
+- Validate the provider output against the relevant Zod schema.
+- Return `{ ok: true, data }` or `{ ok: false, error }` to the browser.
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
-    }
+Planned local Worker setup:
 
-    const body = await request.json();
-    const prompt = body.prompt || "Say hello from the Plot Point AI Game Master.";
-    const system = body.system || "You are the AI Game Master for Plot Point.";
-
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: body.model || "gpt-5.4-mini",
-        instructions: system,
-        input: prompt,
-        max_output_tokens: body.maxOutputTokens || 300,
-      }),
-    });
-
-    const data = await response.json();
-    const text = extractResponseText(data);
-
-    return new Response(JSON.stringify({ text, data }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: response.ok ? 200 : response.status,
-    });
-  },
-};
-
-function extractResponseText(data) {
-  if (typeof data.output_text === "string" && data.output_text.length > 0) {
-    return data.output_text;
-  }
-
-  const output = Array.isArray(data.output) ? data.output : [];
-  for (const item of output) {
-    const content = Array.isArray(item.content) ? item.content : [];
-    for (const part of content) {
-      if (typeof part.text === "string" && part.text.length > 0) {
-        return part.text;
-      }
-    }
-  }
-
-  return "";
-}
+```bash
+npm create cloudflare@latest worker
+cd worker
+npm install openai zod
+npx wrangler secret put OPENAI_API_KEY
+npx wrangler deploy
 ```
+
+OpenAI should be the first adapter, but the browser app should not know that. The browser should only call the Worker endpoint and receive validated game data.
 
 ---
 
@@ -225,26 +398,26 @@ function extractResponseText(data) {
 1. Create a GitHub repo called `plot-point`
 2. Create `index.html` — a "Start Game" button, the game title, a brief description
 3. Enable GitHub Pages → app is live at your GitHub URL
-4. Deploy the Cloudflare Worker → test it returns a response from OpenAI
+4. Deploy the Cloudflare Worker → test it returns a response from the configured AI provider
 5. Write `src/state.js` with the game state object above
-6. Write `src/ai.js` with a single function `callOpenAI(system, prompt)` that posts to your Worker URL and returns the response text
+6. Write `src/ai.js` with a provider-neutral function that posts to your Worker URL and returns validated data
 
 **Prompt for your AI coding assistant**:
-> "I'm building a plain JavaScript web app with no frameworks. Write a function called `callOpenAI(system, prompt)` in `src/ai.js`. It should POST to `https://my-worker.workers.dev` with a JSON body containing `system` and `prompt`, both strings. It should return the response text from OpenAI. Handle errors by logging them and returning null."
+> "I'm building a plain JavaScript web app with no frameworks. Write a function in `src/ai.js` that POSTs to `https://my-worker.workers.dev/generate` with a JSON body containing `task` and `payload`. It should return validated data from the Worker. Handle errors by logging them and returning null."
 
 **Local testing note**: Because the app uses JavaScript modules, test locally with VS Code's Live Server extension or another local web server. Do not test by double-clicking `index.html` and opening it as a `file://` URL; browser module/CORS rules can prevent the app from running.
 
 ---
 
 ### Phase 2 — Character Creation (Week 2)
-**Goal**: Both players privately answer 4 questions; AI generates portraits and stats.
+**Goal**: Both players privately answer 4 questions; AI generates names, physical details, and stats. Full portraits are deferred until the core flow is stable.
 
-1. Build a 4-step form in `game.html` — one question per screen, large text input
+1. Build a 4-step form in the main `index.html` game panel — one question per screen, large text input
 2. Add a "Pass the device to Player 2" interstitial screen between the two players' inputs — screen goes blank so Player 1's answers aren't visible
-3. On completion, call OpenAI with both characters' answers
-4. OpenAI returns: name, physical detail, stats (one 2, two 3s, one 4), 3-sentence portrait for each player
+3. On completion, call the Worker with both characters' answers
+4. The provider adapter returns validated name, physical detail, and stats (one 2, two 3s, one 4) for each player
 5. Store everything in `gameState.players`
-6. Show both portraits on screen simultaneously — "Begin" button starts the game
+6. Show both generated character summaries on screen simultaneously — "Begin" button starts the game
 
 **The "pass the device" pattern** (used throughout the game):
 ```javascript
@@ -262,12 +435,14 @@ function showPassScreen(message, onConfirm) {
 **Goal**: AI generates scenes, players submit Mad Libs privately, scene is revealed together.
 
 1. Build the scene state machine in `scenes.js`: `setup → madlibs_p1 → pass → madlibs_p2 → pass → reveal → choice → rolloff → result → next`
-2. `setup`: call OpenAI with scene number + game state → returns location, challenge, goals
+2. `setup`: call the Worker with scene number + game state → provider adapter returns validated scene data
 3. `madlibs_p1`: Player 1 privately enters word, NPC, action, something funny → pass screen
 4. `madlibs_p2`: Player 2 does the same → pass screen
-5. Call OpenAI with all 8 inputs + scene context → returns woven narrative ending in a dilemma
+5. Call the Worker with all 8 inputs + scene context → returns woven narrative ending in a dilemma
 6. `reveal`: full narrative displayed, read aloud together
 7. `choice`: two buttons, each showing the relevant stat and what's at stake
+
+**Current implementation status**: Scene 1 now supports private Mad Libs for both players and an OpenAI-generated Ordinary World reveal. If OpenAI returns malformed JSON, the app silently retries once with a stricter formatting prompt before showing an error. Scene choices, roll-offs, and the transition into Scene 2 are still upcoming.
 
 ---
 
@@ -314,7 +489,7 @@ function showPassScreen(message, onConfirm) {
 
 **Lead with your stack**: Always open with — *"I'm building a plain JavaScript web app with no frameworks. Vanilla JS only."* Otherwise Codex will reach for React or Node.
 
-**Reference your existing files**: *"I already have `src/state.js` which exports a `state` object and `src/ai.js` which exports `callOpenAI()`. Now write..."*
+**Reference your existing files**: *"I already have `src/state.js` which exports a `state` object and `src/ai.js` which calls the Worker. Now write..."*
 
 **One function at a time**: Build and test one thing, then move on.
 
@@ -330,11 +505,13 @@ function showPassScreen(message, onConfirm) {
 2. **Create a GitHub repo** called `plot-point`
 3. **Create `index.html`** with just the title and a Start button
 4. **Enable GitHub Pages** — your page is live
-5. **Deploy the Cloudflare Worker** — paste the script above, add your OpenAI API key as `OPENAI_API_KEY`
-6. **Test the connection**: write a quick `callOpenAI()` call that sends "say hello" and logs the response
-7. Start Phase 1
+5. **Deploy the Cloudflare Worker** — start with a simple proxy, then migrate it into a Wrangler project when adding npm packages
+6. **Install Worker dependencies when ready** — `openai` and `zod`
+7. **Create provider adapters** — OpenAI first, with room for Anthropic/Gemini later
+8. **Test the connection**: send a small `generate_character` or `generate_scene` task and confirm the Worker returns validated data
+9. Start Phase 1
 
 ---
 
-*Tech Plan v0.4 — May 2026 — Single-device, no database, OpenAI API*
+*Tech Plan v0.5 — June 2026 — Single-device, no database, provider-neutral AI adapter with Zod*
 *Paired with: Plot_Point_Game_Design_Document.md v0.1*

@@ -12,7 +12,9 @@ Plot Point is a two-player in-person storytelling game where players collaborate
 Plot Point is a single-device game. Both players share one phone, tablet, or laptop throughout the session. The device is passed between players when private input is needed — character creation answers, Mad Libs inputs, and the Free Write are each entered on the device privately before it is handed back or turned to face the table. All shared screens (scene reveals, the scoreboard, roll-offs, and the Declaration) are read together. No second screen, app install, or account is required to play.
 
 **Current Web Implementation Note**
-The website version uses an AI Game Master powered by the OpenAI API. The API key is never stored in the browser app; instead, the static JavaScript app calls a small Cloudflare Worker, and the Worker securely forwards AI requests to OpenAI.
+The website version uses an AI Game Master through a Cloudflare Worker. The API key is never stored in the browser app; instead, the static JavaScript app calls the Worker, and the Worker securely forwards AI requests to the selected provider. OpenAI is the first provider, but the architecture should allow future providers through the same validated data contracts.
+
+The first playable web implementation defers character portraits. During character creation, OpenAI currently generates each character's name, physical detail, and stats only. Full three-sentence portraits remain part of the design target and can be added after the core flow is stable.
 
 ---
 
@@ -44,15 +46,15 @@ Character creation takes under three minutes. Players answer four questions **pr
 2. WHAT IS YOUR GIFT?
    The one thing you can do that almost no one else can.
 
-3. WHAT ARE YOU STILL CARRYING?
-   Your wound. One sentence is enough.
+3. WHAT IS YOUR TURN ON?
+   Something you find irresistible.
 
 4. WHAT DO YOU WANT MORE THAN ANYTHING?
    Not from the quest. From your life.
 ```
 
 The AI uses these four answers to generate automatically:
-
+ 
 - A **name** suited to the world and the role
 - A **physical detail** that reflects how the character carries themselves
 - A **list of four stat scores** (see Stats below)
@@ -69,6 +71,22 @@ The portrait implies the wound and the want without stating them directly. The o
 The world will be decided by the game setting.md document. Details and color will be set by this document. The setting.md can be swaped out for alternative genere and settings.  
 
 Settings.md document will include things like tone, time, place, possible antagonists, magic level ect. 
+
+### AI Memory & Continuity
+
+The AI Game Master should not improvise each scene from scratch. Every scene should be generated from five layers of context:
+
+1. **Story Bible** — the selected setting document, including genre, tone, world details, romance style, content boundaries, motifs, possible locations, and possible antagonists.
+2. **Character Bios** — each character's private creation answers, generated name, physical detail, stats, and eventually a public bio/private emotional notes split.
+3. **Story So Far** — compact summaries of completed scenes, including important facts, unresolved threads, emotional shifts, and romance beats.
+4. **Current Scene Blueprint** — the purpose of the current scene number in the 14-scene structure, including tone, required beats, and constraints.
+5. **Player Inputs** — the current scene's Mad Libs, choices, Free Write text, plot twist selections, or clue spending.
+
+This structure keeps the AI consistent without forcing it to reread the full transcript of the game every time. The model should receive enough memory to preserve continuity, but prompts should stay focused on the scene being created.
+
+For the web implementation, scene summaries should be generated in the same AI response as the scene itself whenever possible. The AI returns both player-facing scene text and a compact `storyLogEntry` for future continuity, avoiding a separate summarization call after every scene.
+
+Structured AI responses should be validated against explicit schemas, so the app can reliably store scene text, character data, and story memory without fragile text parsing. The current technical plan uses Zod schemas as the provider-neutral contract, with OpenAI as the first AI provider. Future providers should return the same validated shapes even if their API syntax is different.
 
 ---
 
@@ -158,6 +176,9 @@ The game consists of **14 scenes** across three acts, following the Hero's Journ
 ## The Scene Loop
 
 Every scene follows the same five-step structure.
+
+**Current Web Implementation Note**
+The first implemented scene loop currently covers Scene 1 through private Mad Libs and a shared AI-generated scene reveal. Choices, roll-offs, and results are still design targets for the next build step.
 
 ### Step 1: App Sets the Scene
 The AI generates:

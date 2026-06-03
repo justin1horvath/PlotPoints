@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+.wrangler/
+dist/
+
+# Personal editor state
+.obsidian/
+Design/.obsidian/

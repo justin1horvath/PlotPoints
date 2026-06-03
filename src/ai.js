@@ -1,27 +1,34 @@
 const WORKER_URL = "https://red-art-b4dc.mr-justin-horvath.workers.dev";
 
-export async function getAIReply(prompt) {
+// Sends a provider-neutral AI task to the Cloudflare Worker.
+export async function callAI(task, payload = {}) {
   const response = await fetch(WORKER_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      system: "You are the AI Game Master for Plot Point, a romantic two-player storytelling RPG. Keep test responses brief.",
-      prompt,
+      task,
+      payload,
     }),
   });
 
   const result = await response.json();
 
   if (!response.ok) {
-    throw new Error(result?.data?.error?.message || "OpenAI request failed.");
+    throw new Error(result.error || result?.data?.error?.message || "Worker request failed.");
   }
 
-  if (!result.text) {
-    console.warn("OpenAI response did not include text:", result.data);
-    return "OpenAI responded, but no text was returned. Check the browser console for the raw response.";
+  if (result.ok === undefined) {
+    console.error("Unexpected Worker response:", result);
+    throw new Error(
+      "Worker returned the old response format. Deploy the Wrangler/Zod Worker before testing again."
+    );
   }
 
-  return result.text;
+  if (!result.ok) {
+    throw new Error(result.error || "AI request failed.");
+  }
+
+  return result.data;
 }

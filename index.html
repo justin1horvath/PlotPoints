@@ -10,18 +10,20 @@
     <div class="app-shell">
       <header class="app-header">
         <h1>Plot Point</h1>
+        <div id="phase-display" class="phase-display">
+          Current phase: None
+        </div>
       </header>
       <main>
-        <section class="hero-panel">
+        <section id="game-panel" class="hero-panel">
+          <div class="screen-kicker">New story</div>
+          <h2>Start a romantic adventure</h2>
+          <p class="screen-helper">
+            Begin with private character creation, then pass the device between players.
+          </p>
           <button id="start-story-button" class="action-button">
             Start New Story
           </button>
-          <div id="phase-display" class="phase-display">
-            Current phase: None
-          </div>
-          <div id="ai-test-output" class="ai-test-output">
-            AI connection not tested yet.
-          </div>
         </section>
 
         <section class="scoreboard">
