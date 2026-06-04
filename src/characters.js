@@ -1,5 +1,5 @@
 import { callAI } from "./ai.js";
-import { state } from "./state.js";
+import { saveGameState, state } from "./state.js";
 import { renderPhase, renderScoreboard, startFirstScene } from "./scenes.js";
 
 const CHARACTER_QUESTIONS = [
@@ -14,9 +14,9 @@ const CHARACTER_QUESTIONS = [
     helper: "The one thing you can do that almost no one else can.",
   },
   {
-    key: "wound",
-    label: "What are you still carrying?",
-    helper: "Your wound. One sentence is enough.",
+    key: "turnOn",
+    label: "What is your turn on?",
+    helper: "Something you find irresistible.",
   },
   {
     key: "want",
@@ -33,11 +33,12 @@ export function startCharacterCreation() {
   state.characterCreation.isComplete = false;
   renderPhase();
   renderScoreboard();
+  saveGameState();
   renderCharacterQuestion();
 }
 
 // Draws the current player's current question into the main game panel.
-function renderCharacterQuestion() {
+export function renderCharacterQuestion() {
   const panel = getGamePanel();
   const player = getCurrentPlayer();
   const question = CHARACTER_QUESTIONS[state.characterCreation.questionIndex];
@@ -66,6 +67,10 @@ function renderCharacterQuestion() {
 
   const textarea = document.getElementById("character-answer");
   textarea?.focus();
+  textarea?.addEventListener("input", () => {
+    player.answers[question.key] = textarea.value;
+    saveGameState();
+  });
 
   document
     .getElementById("character-question-form")
@@ -87,12 +92,14 @@ function onCharacterAnswerSubmit(event) {
   }
 
   player.answers[question.key] = answer;
+  saveGameState();
 
   const isLastQuestion =
     state.characterCreation.questionIndex === CHARACTER_QUESTIONS.length - 1;
 
   if (!isLastQuestion) {
     state.characterCreation.questionIndex += 1;
+    saveGameState();
     renderCharacterQuestion();
     return;
   }
@@ -101,12 +108,14 @@ function onCharacterAnswerSubmit(event) {
     showPassScreen("Hand the device to Player 2.", () => {
       state.characterCreation.currentPlayer = 2;
       state.characterCreation.questionIndex = 0;
+      saveGameState();
       renderCharacterQuestion();
     });
     return;
   }
 
   state.characterCreation.isComplete = true;
+  saveGameState();
   generateCharacterDetails();
 }
 
@@ -131,6 +140,7 @@ function showPassScreen(message, onConfirm) {
 async function generateCharacterDetails() {
   state.phase = "Generating Characters";
   renderPhase();
+  saveGameState();
 
   const panel = getGamePanel();
   panel.innerHTML = `
@@ -144,6 +154,7 @@ async function generateCharacterDetails() {
     applyGeneratedCharacters(characterData);
     state.phase = "Characters Ready";
     renderPhase();
+    saveGameState();
     renderCharacterReveal();
   } catch (error) {
     console.error("Character generation failed:", error);
@@ -174,7 +185,7 @@ function buildCharacterPrompt() {
       return `Player ${player.number}
 Role: ${player.answers.role}
 Gift: ${player.answers.gift}
-Wound: ${player.answers.wound}
+Turn on: ${player.answers.turnOn}
 Want: ${player.answers.want}`;
     })
     .join("\n\n");
@@ -182,7 +193,7 @@ Want: ${player.answers.want}`;
   return `Generate starting character details for Plot Point, a two-player romantic storytelling RPG.
 
 Do not write portraits yet.
-Do not reveal the wound or want directly.
+Do not reveal the turn on or want directly.
 Return valid JSON only. No markdown.
 Use strict JSON: double-quoted property names and strings, no comments, and no trailing commas.
 Inside string values, do not use double quote characters. Use apostrophes or rewrite the sentence instead.
@@ -232,7 +243,7 @@ function applyGeneratedCharacters(characterData) {
 }
 
 // Shows both players the generated character summaries after private setup is complete.
-function renderCharacterReveal() {
+export function renderCharacterReveal() {
   const panel = getGamePanel();
   panel.innerHTML = `
     <div class="screen-kicker">Characters ready</div>
@@ -248,6 +259,7 @@ function renderCharacterReveal() {
     ?.addEventListener("click", () => {
       state.phase = "Starting Scene 1";
       renderPhase();
+      saveGameState();
       startFirstScene();
     });
 }

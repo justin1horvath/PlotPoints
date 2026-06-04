@@ -60,7 +60,7 @@ The AI uses these four answers to generate automatically:
 - A **list of four stat scores** (see Stats below)
 - A **three-sentence character portrait** read aloud to both players
 
-The portrait implies the wound and the want without stating them directly. The other player should sense something is there without being able to name it yet.
+The portrait implies the turn on and the want without stating them directly. The other player should sense something is there without being able to name it yet.
 
 **Example portrait:**
 
@@ -139,6 +139,8 @@ ROMANCE SCORE    ENDING
 
 The game consists of **14 scenes** across three acts, following the Hero's Journey framework.
 
+Each scene is controlled by a scene blueprint in the code. A blueprint defines the scene number, name, purpose, tone, app-only rules, player input prompts, and AI constraints. The current implemented interaction type is `madlibs_scene`: each player privately answers two randomized prompts, then the AI uses those inputs plus the scene constraints to write the reveal.
+
 ### ACT 1 — The Ordinary World (4 Scenes)
 *Tone: Playful, establishing. Players are getting comfortable.*
 
@@ -187,13 +189,15 @@ The AI generates:
 - Each character's goal in this scene (may differ — tension lives here)
 
 ### Step 2: Mad Libs
-Before the scene is revealed, the AI asks each player privately for blind inputs:
+Before the scene is revealed, the AI asks each player privately for two blind inputs. The app randomly assigns each player two prompts from the shared prompt pool, and randomizes the order in which those prompts appear.
+
+Prompt pool:
 - A word
 - A character (NPC)
 - An action
 - Something funny
 
-Neither player knows how their inputs will be used. The AI weaves all eight inputs into the scene narrative.
+Neither player knows how their inputs will be used. The AI weaves all four total inputs into the scene narrative.
 
 ### Step 3: Scene Reveal
 The active player reads the full scene aloud to both players. A dilemma lands at the end.
@@ -359,7 +363,7 @@ Both options presented to the active player are difficult. There is no safe choi
 ## The AI Game Master
 
 The AI GM has full visibility into:
-- Both characters' creation answers (including wounds and wants)
+- Both characters' creation answers (including turn ons and wants)
 - Both players' stats
 - The current romance score
 - The current plot point scores

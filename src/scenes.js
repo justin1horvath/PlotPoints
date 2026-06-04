@@ -1,28 +1,9 @@
-import { state } from "./state.js";
+import { saveGameState, state } from "./state.js";
 import { callAI } from "./ai.js";
+import { getSceneBlueprint } from "./sceneBlueprints.js";
+import { buildScenePrompt } from "./promptBuilder.js";
 
-const MAD_LIB_FIELDS = [
-  {
-    key: "word",
-    label: "A vivid word",
-    placeholder: "moonlit, stubborn, velvet...",
-  },
-  {
-    key: "npc",
-    label: "A character or NPC",
-    placeholder: "the lighthouse keeper, a nervous duke...",
-  },
-  {
-    key: "action",
-    label: "An action",
-    placeholder: "drops a key, starts singing...",
-  },
-  {
-    key: "funny",
-    label: "Something funny",
-    placeholder: "a cursed teapot, terrible flirting...",
-  },
-];
+const SCENE_MAX_OUTPUT_TOKENS = 6000;
 
 // Updates the small phase label so players know where they are in the flow.
 export function renderPhase() {
@@ -51,12 +32,44 @@ export function renderScoreboard() {
   }
 }
 
-// Begins Scene 1 and asks Player 1 for private Mad Libs inputs.
+// Compatibility wrapper for the current character creation flow.
 export function startFirstScene() {
-  state.currentScene = 1;
+  startScene(1);
+}
+
+// Starts the correct reusable scene flow for a blueprint.
+export function startScene(sceneNumber) {
+  const blueprint = getSceneBlueprint(sceneNumber);
+
+  switch (blueprint.type) {
+    case "madlibs_scene":
+      startMadLibsScene(blueprint);
+      break;
+    default:
+      throw new Error(`Unsupported scene type: ${blueprint.type}`);
+  }
+}
+
+// Starts a scene that collects private Mad Libs before AI generation.
+function startMadLibsScene(blueprint) {
+  const madLibAssignments = createMadLibAssignments(blueprint);
+
+  state.currentScene = blueprint.number;
   state.scenePhase = "madlibs_p1";
-  state.phase = "Scene 1 Mad Libs";
-  state.currentSceneData = {
+  state.phase = `Scene ${blueprint.number} Mad Libs`;
+  state.currentSceneData = createSceneDataFromBlueprint(
+    blueprint,
+    madLibAssignments
+  );
+  renderPhase();
+  saveGameState();
+  renderSceneMadLibs(1);
+}
+
+// Creates fresh scene state from the current blueprint.
+function createSceneDataFromBlueprint(blueprint, madLibAssignments) {
+  return {
+    blueprint,
     title: "",
     location: "",
     setup: "",
@@ -64,36 +77,56 @@ export function startFirstScene() {
       player1: "",
       player2: "",
     },
-    madLibsInputs: {
-      player1: { word: "", npc: "", action: "", funny: "" },
-      player2: { word: "", npc: "", action: "", funny: "" },
-    },
+    madLibsInputs: createMadLibInputState(blueprint),
+    assignedMadLibFields: madLibAssignments,
     narrative: "",
     storyLogEntry: null,
   };
-  renderPhase();
-  renderSceneMadLibs(1);
+}
+
+// Creates blank Mad Lib answer storage for every prompt in the blueprint pool.
+function createMadLibInputState(blueprint) {
+  const blankAnswers = Object.fromEntries(
+    blueprint.madLibs.promptPool.map((field) => [field.key, ""])
+  );
+
+  return {
+    player1: { ...blankAnswers },
+    player2: { ...blankAnswers },
+  };
 }
 
 // Draws the private Mad Libs form for one player.
-function renderSceneMadLibs(playerNumber) {
+export function renderSceneMadLibs(playerNumber) {
   const panel = getGamePanel();
-  const inputs = state.currentSceneData.madLibsInputs[`player${playerNumber}`];
+  const scene = state.currentSceneData;
+  const inputs = scene.madLibsInputs[`player${playerNumber}`];
+  const assignedFields = getAssignedMadLibFields(playerNumber);
 
   panel.innerHTML = `
-    <div class="screen-kicker">Scene 1 private Mad Libs</div>
+    <div class="screen-kicker">Scene ${scene.blueprint.number} private Mad Libs</div>
     <h2>Player ${playerNumber}, add ingredients</h2>
-    <p class="screen-helper">These will be woven into the first scene. The other player should not see your answers.</p>
+    <p class="screen-helper">Answer your ${assignedFields.length} prompts. They will be woven into the scene, and the other player should not see them.</p>
     <form id="mad-libs-form" class="mad-libs-form">
-      ${MAD_LIB_FIELDS.map((field) => renderMadLibField(field, inputs)).join("")}
+      ${assignedFields.map((field) => renderMadLibField(field, inputs)).join("")}
       <div class="form-footer">
-        <span>Player ${playerNumber} of 2</span>
+        <span>${assignedFields.length} private prompts</span>
         <button class="action-button" type="submit">Save Inputs</button>
       </div>
     </form>
   `;
 
   document.querySelector(".short-entry")?.focus();
+  document
+    .getElementById("mad-libs-form")
+    ?.addEventListener("input", (event) => {
+      if (!event.target.matches("input")) {
+        return;
+      }
+
+      inputs[event.target.name] = event.target.value;
+      saveGameState();
+    });
   document
     .getElementById("mad-libs-form")
     ?.addEventListener("submit", (event) => onMadLibsSubmit(event, playerNumber));
@@ -117,26 +150,29 @@ function renderMadLibField(field, inputs) {
   `;
 }
 
-// Saves one player's Mad Libs and either passes the device or generates Scene 1.
+// Saves one player's Mad Libs and either passes the device or generates the scene.
 function onMadLibsSubmit(event, playerNumber) {
   event.preventDefault();
 
   const formData = new FormData(event.currentTarget);
   const inputs = state.currentSceneData.madLibsInputs[`player${playerNumber}`];
+  const assignedFields = getAssignedMadLibFields(playerNumber);
 
-  MAD_LIB_FIELDS.forEach((field) => {
+  assignedFields.forEach((field) => {
     inputs[field.key] = String(formData.get(field.key) || "").trim();
   });
+  saveGameState();
 
   if (playerNumber === 1) {
     state.scenePhase = "madlibs_p2";
+    saveGameState();
     showScenePassScreen("Hand the device to Player 2.", () => {
       renderSceneMadLibs(2);
     });
     return;
   }
 
-  generateFirstScene();
+  generateCurrentScene();
 }
 
 // Clears private inputs before the next player receives the device.
@@ -156,39 +192,32 @@ function showScenePassScreen(message, onConfirm) {
     ?.addEventListener("click", onConfirm);
 }
 
-// Sends characters plus Mad Libs to the Worker and stores the generated first scene.
-async function generateFirstScene() {
+// Sends current scene context to the Worker and stores the generated scene.
+async function generateCurrentScene() {
+  const blueprint = state.currentSceneData.blueprint;
   state.scenePhase = "generating";
-  state.phase = "Generating Scene 1";
+  state.phase = `Generating Scene ${blueprint.number}`;
   renderPhase();
+  saveGameState();
 
   const panel = getGamePanel();
   panel.innerHTML = `
     <div class="screen-kicker">AI Game Master</div>
-    <h2>Writing Scene 1...</h2>
-    <p class="screen-helper">The AI Game Master is weaving both players' Mad Libs into the Ordinary World.</p>
+    <h2>Writing Scene ${blueprint.number}...</h2>
+    <p class="screen-helper">The AI Game Master is weaving both players' inputs into ${escapeHtml(blueprint.name)}.</p>
   `;
 
   try {
-    const sceneData = await requestFirstSceneData();
+    const sceneData = await requestSceneData(blueprint);
     state.currentSceneData = {
       ...state.currentSceneData,
       ...sceneData,
     };
-    state.storyLog.push({
-      scene: 1,
-      sceneName: "Ordinary World",
-      title: sceneData.title,
-      ...sceneData.storyLogEntry,
-      mechanicalResult: {
-        winner: null,
-        romanceScoreChange: 0,
-        plotPointAwardedTo: null,
-      },
-    });
+    addSceneToStoryLog(blueprint, sceneData);
     state.scenePhase = "reveal";
-    state.phase = "Scene 1 Reveal";
+    state.phase = `Scene ${blueprint.number} Reveal`;
     renderPhase();
+    saveGameState();
     renderSceneReveal();
   } catch (error) {
     console.error("Scene generation failed:", error);
@@ -200,91 +229,117 @@ async function generateFirstScene() {
     `;
     document
       .getElementById("retry-scene-generation")
-      ?.addEventListener("click", generateFirstScene);
+      ?.addEventListener("click", generateCurrentScene);
   }
 }
 
-// Requests validated Scene 1 data from the Worker.
-async function requestFirstSceneData() {
+// Requests validated scene data from the Worker.
+async function requestSceneData(blueprint) {
   return callAI("generate_scene", {
-    prompt: buildFirstScenePrompt(),
-    maxOutputTokens: 3000,
+    prompt: buildScenePrompt({
+      blueprint,
+      players: state.players,
+      storyLog: state.storyLog,
+      madLibsText: buildMadLibsPromptText(),
+    }),
+    maxOutputTokens: SCENE_MAX_OUTPUT_TOKENS,
   });
 }
 
-// Builds the exact prompt that asks OpenAI to create Scene 1.
-function buildFirstScenePrompt() {
-  const playerText = state.players
-    .map((player) => {
-      return `Player ${player.number}: ${player.name}
-Role: ${player.answers.role}
-Gift: ${player.answers.gift}
-Physical detail: ${player.physicalDetail}
-Stats: Guts ${player.stats.guts}, Charm ${player.stats.charm}, Wit ${player.stats.wit}, Heart ${player.stats.heart}
-Private wound: ${player.answers.wound}
-Private want: ${player.answers.want}`;
-    })
-    .join("\n\n");
+// Stores compact scene memory for future prompts.
+function addSceneToStoryLog(blueprint, sceneData) {
+  state.storyLog.push({
+    scene: blueprint.number,
+    sceneName: blueprint.name,
+    title: sceneData.title,
+    ...sceneData.storyLogEntry,
+    mechanicalResult: {
+      winner: null,
+      romanceScoreChange: 0,
+      plotPointAwardedTo: null,
+    },
+  });
+}
 
-  const madLibs = [1, 2]
-    .map((playerNumber) => {
-      const inputs = state.currentSceneData.madLibsInputs[`player${playerNumber}`];
-      return `Player ${playerNumber} Mad Libs:
-Word: ${inputs.word}
-NPC: ${inputs.npc}
-Action: ${inputs.action}
-Something funny: ${inputs.funny}`;
-    })
-    .join("\n\n");
-
-  return `Write Scene 1 for Plot Point, a two-player romantic storytelling RPG.
-
-Scene 1 is "Ordinary World." It should show who each character is before they know each other.
-The characters should not meet yet.
-Tone: playful, vivid, emotionally observant, with a hint of longing.
-Use all eight Mad Libs inputs naturally.
-Do not reveal either private wound or private want directly; only imply them.
-Do not include a roll-off, choice, or dilemma yet.
-Return valid JSON only. No markdown.
-Use strict JSON: double-quoted property names and strings, no comments, and no trailing commas.
-Inside string values, do not use double quote characters. Use apostrophes or rewrite the sentence instead.
-
-JSON shape:
-{
-  "title": "",
-  "location": "",
-  "setup": "",
-  "goals": {
-    "player1": "",
-    "player2": ""
-  },
-  "narrative": "",
-  "storyLogEntry": {
-    "summary": "",
-    "emotionalShift": "",
-    "unresolvedThreads": [],
-    "importantFacts": [],
-    "romanceBeat": ""
+// Randomly assigns Mad Lib prompt types using the blueprint's rules.
+function createMadLibAssignments(blueprint) {
+  if (blueprint.rules.madLibAssignment !== "split_random") {
+    throw new Error(`Unsupported Mad Lib assignment: ${blueprint.rules.madLibAssignment}`);
   }
+
+  const promptsPerPlayer = blueprint.rules.promptsPerPlayer;
+  const totalNeeded = promptsPerPlayer * 2;
+
+  if (blueprint.madLibs.promptPool.length < totalNeeded) {
+    throw new Error(
+      `Scene ${blueprint.number} needs at least ${totalNeeded} Mad Lib prompts.`
+    );
+  }
+
+  const shuffledFields = shuffleArray(blueprint.madLibs.promptPool);
+
+  return {
+    player1: shuffledFields.slice(0, promptsPerPlayer).map((field) => field.key),
+    player2: shuffledFields
+      .slice(promptsPerPlayer, promptsPerPlayer * 2)
+      .map((field) => field.key),
+  };
 }
 
-The narrative should be 3 to 5 short paragraphs meant to be read aloud.
-The storyLogEntry should be compact memory for future scenes, not prose for players.
+// Returns the prompt definitions assigned to one player for this scene.
+function getAssignedMadLibFields(playerNumber) {
+  const blueprint = state.currentSceneData.blueprint;
+  const assignedKeys =
+    state.currentSceneData.assignedMadLibFields?.[`player${playerNumber}`] ||
+    [];
 
-Characters:
-${playerText}
-
-Mad Libs:
-${madLibs}`;
+  return assignedKeys
+    .map((key) => blueprint.madLibs.promptPool.find((field) => field.key === key))
+    .filter(Boolean);
 }
 
-// Shows the first generated scene on the shared screen for both players.
-function renderSceneReveal() {
+// Formats both players' answered Mad Libs for the scene prompt.
+function buildMadLibsPromptText() {
+  return [1, 2]
+    .map((playerNumber) => {
+      return `Player ${playerNumber} Mad Libs:
+${formatPlayerMadLibs(playerNumber)}`;
+    })
+    .join("\n\n");
+}
+
+// Formats one player's answered Mad Libs for the scene prompt.
+function formatPlayerMadLibs(playerNumber) {
+  const inputs = state.currentSceneData.madLibsInputs[`player${playerNumber}`];
+
+  return getAssignedMadLibFields(playerNumber)
+    .map((field) => `${field.label}: ${inputs[field.key]}`)
+    .join("\n");
+}
+
+// Returns a shuffled copy of an array without changing the original.
+function shuffleArray(items) {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[randomIndex]] = [
+      shuffled[randomIndex],
+      shuffled[index],
+    ];
+  }
+
+  return shuffled;
+}
+
+// Shows the generated scene on the shared screen for both players.
+export function renderSceneReveal() {
   const panel = getGamePanel();
   const scene = state.currentSceneData;
+  const blueprint = scene.blueprint;
 
   panel.innerHTML = `
-    <div class="screen-kicker">Scene 1 · Ordinary World</div>
+    <div class="screen-kicker">Scene ${blueprint.number} · ${escapeHtml(blueprint.name)}</div>
     <h2>${escapeHtml(scene.title)}</h2>
     <div class="scene-meta">
       <div><span>Location</span>${escapeHtml(scene.location)}</div>
@@ -300,13 +355,14 @@ function renderSceneReveal() {
   document
     .getElementById("scene-complete-button")
     ?.addEventListener("click", () => {
-      state.phase = "Scene 1 Complete";
+      state.phase = `Scene ${blueprint.number} Complete`;
       state.scenePhase = "complete";
       renderPhase();
+      saveGameState();
       panel.innerHTML = `
-        <div class="screen-kicker">Scene 1 complete</div>
-        <h2>The Ordinary World is set.</h2>
-        <p class="screen-helper">Next up: Scene 2, The Meeting.</p>
+        <div class="screen-kicker">Scene ${blueprint.number} complete</div>
+        <h2>${escapeHtml(blueprint.name)} is set.</h2>
+        <p class="screen-helper">Next scene flow comes next.</p>
       `;
     });
 }

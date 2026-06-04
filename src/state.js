@@ -16,7 +16,11 @@ export const state = {
   scenePhase: "none",
   currentSceneData: createEmptySceneData(),
   storyLog: [],
+  aiLogSession: createAiLogSession(),
+  aiLog: [],
 };
+
+const SAVED_GAME_KEY = "plot-point-current-game";
 
 // Restores the game to its starting values before a new story begins.
 export function resetState() {
@@ -37,6 +41,50 @@ export function resetState() {
   state.scenePhase = "none";
   state.currentSceneData = createEmptySceneData();
   state.storyLog = [];
+  state.aiLogSession = createAiLogSession();
+  state.aiLog = [];
+  saveGameState();
+}
+
+// Saves the current game state in this browser tab so a reload can recover it.
+export function saveGameState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(SAVED_GAME_KEY, JSON.stringify(state));
+}
+
+// Loads the last saved game state for this browser tab.
+export function loadSavedGameState() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const savedGame = window.sessionStorage.getItem(SAVED_GAME_KEY);
+
+  if (!savedGame) {
+    return false;
+  }
+
+  try {
+    Object.assign(state, JSON.parse(savedGame));
+    return state.phase !== "None";
+  } catch (error) {
+    console.error("Saved game could not be restored:", error);
+    window.sessionStorage.removeItem(SAVED_GAME_KEY);
+    return false;
+  }
+}
+
+// Creates basic metadata for one game's AI communication log.
+function createAiLogSession() {
+  const startedAt = new Date().toISOString();
+
+  return {
+    id: `plot-point-${startedAt.replaceAll(":", "-")}`,
+    startedAt,
+  };
 }
 
 // Creates the default data shape for one player's private answers and generated stats.
@@ -46,7 +94,7 @@ function createEmptyPlayer(number) {
     answers: {
       role: "",
       gift: "",
-      wound: "",
+      turnOn: "",
       want: "",
     },
     name: "",
@@ -74,12 +122,16 @@ function createEmptySceneData() {
       player1: createEmptyMadLibs(),
       player2: createEmptyMadLibs(),
     },
+    assignedMadLibFields: {
+      player1: [],
+      player2: [],
+    },
     narrative: "",
     storyLogEntry: null,
   };
 }
 
-// Creates the four private Mad Libs prompts each player answers before a scene.
+// Creates the storage object for the available Mad Libs prompt types.
 function createEmptyMadLibs() {
   return {
     word: "",

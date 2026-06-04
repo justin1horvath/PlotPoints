@@ -86,8 +86,8 @@ plot-point/
 ├── src/
 │   ├── state.js        ← All game state (one object, lives in memory)
 │   ├── ai.js           ← Calls to Cloudflare Worker (provider-neutral)
-│   ├── promptBuilder.js ← Assembles reusable OpenAI prompts (planned)
-│   ├── sceneBlueprints.js ← Scene-by-scene AI instructions (planned)
+│   ├── promptBuilder.js ← Assembles reusable OpenAI prompts
+│   ├── sceneBlueprints.js ← Scene-by-scene AI instructions
 │   ├── scenes.js       ← Scene loop logic (setup→madlibs→reveal→choice→rolloff→result)
 │   ├── rolls.js        ← Roll-off mechanics
 │   └── app.js          ← App initialization and event wiring
@@ -124,7 +124,7 @@ Every scene-generation prompt should be built from five sources:
 2. **Character State**
    - Lives in `state.players`.
    - Includes private creation answers, generated names, physical details, stats, and eventually public bios/private notes.
-   - Private wounds and wants may be passed to the model, but prompts must instruct the model not to reveal them directly unless the scene calls for it.
+   - Private turn ons and wants may be passed to the model, but prompts must instruct the model not to reveal them directly unless the scene calls for it.
 
 3. **Story So Far**
    - Lives in `state.storyLog`.
@@ -133,28 +133,31 @@ Every scene-generation prompt should be built from five sources:
    - Preferred strategy: ask OpenAI to return a `storyLogEntry` as part of the same scene-generation response. This avoids an extra summary API call while still preserving emotional continuity.
 
 4. **Scene Blueprint**
-   - Planned file: `src/sceneBlueprints.js`.
-   - Defines what the current scene number is supposed to do.
-   - Includes act, scene name, purpose, tone, must-include beats, must-avoid constraints, and whether the characters meet, face a challenge, or reveal something.
+   - Implemented file: `src/sceneBlueprints.js`.
+   - Defines what each scene number is supposed to do.
+   - Includes act, scene name, scene type, description, tone, app rules, Mad Lib prompt pool, and AI constraints.
+   - `type` and `rules` are used by the JavaScript app to choose the scene flow and UI behavior.
+   - `constraints` are sent to the AI model so it knows what the generated scene must do or avoid.
+   - The current implemented scene type is `madlibs_scene`. Future scene types can be added later without rewriting the basic scene starter.
 
 5. **Player Inputs**
    - Lives in `state.currentSceneData.madLibsInputs`.
    - Includes the blind Mad Libs words supplied privately by each player.
+   - For the current scene loop, the app randomly assigns two prompt types to each player from the shared four-prompt pool and randomizes each player's prompt order.
    - Later scenes may also include choices, Free Write text, plot twist selections, and clue spending.
 
 ### Prompt Builder
 
-Planned file: `src/promptBuilder.js`.
+Implemented file: `src/promptBuilder.js`.
 
 This file should assemble prompts instead of letting each scene function hand-write a full prompt. The goal is a reusable function like:
 
 ```javascript
 buildScenePrompt({
-  storyBible,
+  blueprint,
   players,
   storyLog,
-  sceneBlueprint,
-  madLibsInputs,
+  madLibsText,
 });
 ```
 
@@ -174,7 +177,7 @@ STORY SO FAR
 [compact scene summaries]
 
 CURRENT SCENE BLUEPRINT
-[scene number, purpose, tone, must include, must avoid]
+[scene number, description, tone, constraints]
 
 PLAYER MAD LIBS
 [player 1 inputs]
@@ -183,6 +186,8 @@ PLAYER MAD LIBS
 OUTPUT FORMAT
 Return strict JSON only...
 ```
+
+For Scene 1, `scenes.js` now calls a reusable `startScene(sceneNumber)` function. That function looks up the blueprint, uses the app-only `type` and `rules` to run the `madlibs_scene` flow, collects randomized Mad Lib inputs, builds the prompt from the scene description and AI constraints, asks the Worker for validated JSON, stores the returned `storyLogEntry`, and renders the reveal.
 
 ### Structured Output Contracts
 
@@ -217,7 +222,7 @@ Zod should be used to:
 - Produce clearer errors when a response is missing required fields.
 - Keep response contracts provider-neutral.
 
-Structured JSON responses need enough output budget to finish the full object. Current targets are roughly 1,500 output tokens for character generation and 3,000 output tokens for scene generation. If errors mention unterminated strings or truncated JSON, increase the relevant `max_output_tokens` before changing the schema.
+Structured JSON responses need enough output budget to finish the full object. Current targets are roughly 1,500 output tokens for character generation and 6,000 output tokens for scene generation. If errors mention unterminated strings or truncated JSON, increase the relevant `max_output_tokens` before changing the schema.
 
 ### AI Provider Adapter
 
@@ -261,16 +266,28 @@ OpenAI is the first provider. Its adapter can use the OpenAI JavaScript SDK and 
 
 ### AI Call Log
 
-For debugging and tuning, each model call should eventually be stored in memory:
+For debugging and tuning, each model call is stored in memory for the current game:
 
 ```javascript
 aiLog: [
   {
-    type: "scene_generation",
-    sceneNumber: 1,
-    promptSent: "...",
-    responseReceived: "...",
-    parsedData: {},
+    id: 1,
+    task: "generate_scene",
+    status: "success",
+    request: {
+      task: "generate_scene",
+      payload: {
+        prompt: "...",
+        maxOutputTokens: 6000
+      }
+    },
+    response: {
+      httpStatus: 200,
+      body: {
+        ok: true,
+        data: {}
+      }
+    },
     createdAt: "2026-05-31T12:00:00.000Z"
   }
 ]
@@ -283,7 +300,9 @@ This lets us answer:
 - What did the app successfully parse?
 - Why did a scene feel wrong or fail?
 
-For now, `aiLog` can live in memory only. Later, it can be shown on a debug screen or saved to `localStorage`.
+The browser app cannot silently create files on the user's computer, so the log lives in memory and can be downloaded with the **Download AI Log** button. A new log session starts whenever the player starts a new story.
+
+The log captures what the browser sends to the Cloudflare Worker and what the Worker returns to the browser. It does not expose the OpenAI API key. It also does not include hidden OpenAI SDK internals unless the Worker is later changed to return additional debug metadata.
 
 ### Design Rule
 
@@ -318,7 +337,9 @@ The prototype now routes browser AI calls through provider-neutral task names. T
 
 ## Game State Object
 
-Everything the app needs to know lives in one JavaScript object in `state.js`. Nothing is saved to a server. If the page refreshes, the game resets — which is fine for an in-person session.
+Everything the app needs to know lives in one JavaScript object in `state.js`. Nothing is saved to a server.
+
+The browser also saves the current game to `sessionStorage` while players type and when major game phases change. This protects the prototype from accidental page reloads during local development. If the page refreshes in the same browser tab, the app restores the current screen and the latest typed input. Starting a new story resets that saved session.
 
 ```javascript
 const gameState = {
@@ -326,7 +347,7 @@ const gameState = {
   players: [
     {
       number: 1,
-      role: "", gift: "", wound: "", want: "",   // private creation answers
+      role: "", gift: "", turnOn: "", want: "",   // private creation answers
       name: "", physicalDetail: "", // AI-generated
       stats: { guts: 0, charm: 0, wit: 0, heart: 0 },
       plotPoints: 0,
@@ -436,13 +457,13 @@ function showPassScreen(message, onConfirm) {
 
 1. Build the scene state machine in `scenes.js`: `setup → madlibs_p1 → pass → madlibs_p2 → pass → reveal → choice → rolloff → result → next`
 2. `setup`: call the Worker with scene number + game state → provider adapter returns validated scene data
-3. `madlibs_p1`: Player 1 privately enters word, NPC, action, something funny → pass screen
-4. `madlibs_p2`: Player 2 does the same → pass screen
-5. Call the Worker with all 8 inputs + scene context → returns woven narrative ending in a dilemma
+3. `madlibs_p1`: Player 1 privately answers two randomized prompts from the Mad Libs pool → pass screen
+4. `madlibs_p2`: Player 2 privately answers the remaining two randomized prompts → pass screen
+5. Call the Worker with all 4 inputs + scene context → returns woven narrative ending in a dilemma
 6. `reveal`: full narrative displayed, read aloud together
 7. `choice`: two buttons, each showing the relevant stat and what's at stake
 
-**Current implementation status**: Scene 1 now supports private Mad Libs for both players and an OpenAI-generated Ordinary World reveal. If OpenAI returns malformed JSON, the app silently retries once with a stricter formatting prompt before showing an error. Scene choices, roll-offs, and the transition into Scene 2 are still upcoming.
+**Current implementation status**: Scene 1 now uses the reusable scene blueprint + prompt builder structure. It supports two randomized private Mad Lib prompts per player and an AI-generated Ordinary World reveal. Scene choices, roll-offs, additional scene types, and the transition into Scene 2 are still upcoming.
 
 ---
 
