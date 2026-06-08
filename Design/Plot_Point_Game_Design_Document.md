@@ -146,7 +146,8 @@ Each scene is controlled by a scene blueprint in the code. A blueprint defines t
 
 | #   | Scene             | Notes                                    |
 | --- | ----------------- | ---------------------------------------- |
-| 1   | Ordinary World    | Who each character is alone              |
+| 0   | Cold Open         | A bold tease for what is to come         |
+| 1   | Ordinary World    | Set the world as it normally is          |
 | 2   | The Meeting       | First scene with both characters present |
 | 3   | Call to Adventure | The quest is established                 |
 | 4   | Refusal           | Each character's hesitation surfaces     |
@@ -189,13 +190,8 @@ The AI generates:
 - Each character's goal in this scene (may differ — tension lives here)
 
 ### Step 2: Mad Libs
-Before the scene is revealed, the AI asks each player privately for two blind inputs. The app randomly assigns each player two prompts from the shared prompt pool, and randomizes the order in which those prompts appear.
+Before the scene is revealed, the AI asks each player privately for two blind inputs. The app randomly assigns each player two prompts from the shared prompt pool, and randomizes the order in which those prompts appear. the prompts are set by the 
 
-Prompt pool:
-- A word
-- A character (NPC)
-- An action
-- Something funny
 
 Neither player knows how their inputs will be used. The AI weaves all four total inputs into the scene narrative.
 
