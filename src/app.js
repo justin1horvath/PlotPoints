@@ -63,22 +63,27 @@ function renderRestoredScreen() {
     return;
   }
 
-  if (state.scenePhase === "madlibs_p1") {
-    renderSceneMadLibs(1);
+  if (state.scenePhase === "madlibs_active") {
+    renderSceneMadLibs(state.currentSceneData.inputOrder?.[0] || state.activePlayer);
     return;
   }
 
-  if (state.scenePhase === "madlibs_p2") {
-    renderSceneMadLibs(2);
+  if (state.scenePhase === "madlibs_other") {
+    renderSceneMadLibs(state.currentSceneData.inputOrder?.[1] || getOtherPlayerNumber());
     return;
   }
 
   if (state.scenePhase === "generating") {
-    renderSceneMadLibs(2);
+    renderSceneMadLibs(state.currentSceneData.inputOrder?.[1] || getOtherPlayerNumber());
     return;
   }
 
   if (state.scenePhase === "reveal") {
     renderSceneReveal();
   }
+}
+
+// Returns the non-active player number in a two-player game.
+function getOtherPlayerNumber() {
+  return state.activePlayer === 1 ? 2 : 1;
 }

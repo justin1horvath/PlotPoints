@@ -88,7 +88,10 @@ plot-point/
 │   ├── ai.js           ← Calls to Cloudflare Worker (provider-neutral)
 │   ├── promptBuilder.js ← Assembles reusable OpenAI prompts
 │   ├── sceneBlueprints.js ← Scene-by-scene AI instructions
-│   ├── scenes.js       ← Scene loop logic (setup→madlibs→reveal→choice→rolloff→result)
+│   ├── scenes.js       ← Scene router that dispatches by blueprint type
+│   ├── ui.js           ← Shared phase and scoreboard rendering
+│   ├── sceneTypes/
+│   │   └── madlibsScene.js ← Mad Libs scene interaction flow
 │   ├── rolls.js        ← Roll-off mechanics
 │   └── app.js          ← App initialization and event wiring
 │
@@ -138,7 +141,7 @@ Every scene-generation prompt should be built from five sources:
    - Includes act, scene name, scene type, description, tone, app rules, Mad Lib prompt pool, and AI constraints.
    - `type` and `rules` are used by the JavaScript app to choose the scene flow and UI behavior.
    - `constraints` are sent to the AI model so it knows what the generated scene must do or avoid.
-   - The current implemented scene type is `madlibs_scene`. Future scene types can be added later without rewriting the basic scene starter.
+   - The current implemented scene type is `madlibs_scene`, implemented in `src/sceneTypes/madlibsScene.js`. Future scene types should get their own files in `src/sceneTypes/` and be registered once in `src/scenes.js`.
 
 5. **Player Inputs**
    - Lives in `state.currentSceneData.madLibsInputs`.
@@ -154,6 +157,7 @@ This file should assemble prompts instead of letting each scene function hand-wr
 
 ```javascript
 buildScenePrompt({
+  activePlayer,
   blueprint,
   players,
   storyLog,
@@ -187,7 +191,7 @@ OUTPUT FORMAT
 Return strict JSON only...
 ```
 
-For Scene 1, `scenes.js` now calls a reusable `startScene(sceneNumber)` function. That function looks up the blueprint, uses the app-only `type` and `rules` to run the `madlibs_scene` flow, collects randomized Mad Lib inputs, builds the prompt from the scene description and AI constraints, asks the Worker for validated JSON, stores the returned `storyLogEntry`, and renders the reveal.
+For Scene 1, `scenes.js` now calls a reusable `startScene(sceneNumber)` function. That function looks up the blueprint, uses the app-only `type` to choose the scene type handler, then delegates the interaction to `src/sceneTypes/madlibsScene.js`. The Mad Libs scene handler uses the app-only `rules`, collects randomized Mad Lib inputs, builds the prompt from the scene description and AI constraints, asks the Worker for validated JSON, stores the returned `storyLogEntry`, and renders the reveal.
 
 ### Structured Output Contracts
 
@@ -331,6 +335,8 @@ Scene 1 now asks OpenAI to return scene content and story memory in one JSON res
 
 The app stores `storyLogEntry` in `state.storyLog` and adds mechanical result fields itself. This gives future prompts story continuity without making a separate summarization request.
 
+The scene response still includes structured fields like `location` and `goals`, but the reveal screen does not display those as separate boxes. The prompt instructs the model to weave those details into `narrative`, and the player-facing reveal shows the title, read-aloud instruction, and narrative text.
+
 The prototype now routes browser AI calls through provider-neutral task names. The intended next architecture is to deploy the Wrangler-managed Worker so schemas and provider calls live server-side using Zod. Prompts can still describe the desired creative behavior, but Zod should enforce the response shape for character generation, scene generation, and future scene summaries.
 
 ---
@@ -359,7 +365,7 @@ const gameState = {
   // Game progress
   currentScene: 1,          // 1–14
   romanceScore: 0,          // 0–14
-  activePlayer: 1,          // whose turn it is
+  activePlayer: 1,          // randomly assigned at new game start
   scenePhase: "setup",      // setup | madlibs | reveal | choice | rolloff | result
   plotTwists: [],           // array of twist objects
 
@@ -455,15 +461,15 @@ function showPassScreen(message, onConfirm) {
 ### Phase 3 — Scene Engine (Weeks 3–4)
 **Goal**: AI generates scenes, players submit Mad Libs privately, scene is revealed together.
 
-1. Build the scene state machine in `scenes.js`: `setup → madlibs_p1 → pass → madlibs_p2 → pass → reveal → choice → rolloff → result → next`
+1. Build scene type modules under `src/sceneTypes/`. `scenes.js` should stay a small router that maps blueprint `type` values to the correct module.
 2. `setup`: call the Worker with scene number + game state → provider adapter returns validated scene data
-3. `madlibs_p1`: Player 1 privately answers two randomized prompts from the Mad Libs pool → pass screen
-4. `madlibs_p2`: Player 2 privately answers the remaining two randomized prompts → pass screen
+3. `madlibs_active`: the active player privately answers two randomized prompts from the Mad Libs pool → pass screen
+4. `madlibs_other`: the other player privately answers the remaining two randomized prompts → pass screen
 5. Call the Worker with all 4 inputs + scene context → returns woven narrative ending in a dilemma
-6. `reveal`: full narrative displayed, read aloud together
+6. `reveal`: full narrative displayed; active player reads aloud
 7. `choice`: two buttons, each showing the relevant stat and what's at stake
 
-**Current implementation status**: Scene 1 now uses the reusable scene blueprint + prompt builder structure. It supports two randomized private Mad Lib prompts per player and an AI-generated Ordinary World reveal. Scene choices, roll-offs, additional scene types, and the transition into Scene 2 are still upcoming.
+**Current implementation status**: Scene 1 now uses the reusable scene blueprint + prompt builder + scene type module structure. It supports two randomized private Mad Lib prompts per player and an AI-generated Ordinary World reveal. Scene choices, roll-offs, additional scene type modules, and the transition into Scene 2 are still upcoming.
 
 ---
 

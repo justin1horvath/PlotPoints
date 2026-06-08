@@ -62,6 +62,8 @@ The AI uses these four answers to generate automatically:
 
 The portrait implies the turn on and the want without stating them directly. The other player should sense something is there without being able to name it yet.
 
+When a new game starts, the app randomly assigns one player as the **active player**. The active player leads scene activities until a later mechanic changes active player status.
+
 **Example portrait:**
 
 > *"This is Sable — a lean, road-worn musician whose hands are always moving even when there's no instrument nearby. She can read a room like a map and has never met a silence she couldn't fill. She tells herself she prefers the road. She has never once believed it."*
@@ -189,14 +191,15 @@ The AI generates:
 - A challenge or obstacle
 - Each character's goal in this scene (may differ — tension lives here)
 
-### Step 2: Mad Libs
-Before the scene is revealed, the AI asks each player privately for two blind inputs. The app randomly assigns each player two prompts from the shared prompt pool, and randomizes the order in which those prompts appear. the prompts are set by the 
+These details are woven into the scene narration. They are not displayed as separate player-facing text boxes.
 
+### Step 2: Mad Libs
+Before the scene is revealed, the AI asks each player privately for two blind inputs. The active player answers first, then the other player answers after a pass screen. The app randomly assigns each player two prompts from the shared prompt pool, and randomizes the order in which those prompts appear. The prompts are set by the scene blueprint file.
 
 Neither player knows how their inputs will be used. The AI weaves all four total inputs into the scene narrative.
 
 ### Step 3: Scene Reveal
-The active player reads the full scene aloud to both players. A dilemma lands at the end.
+The active player reads the full scene aloud to both players. A dilemma lands at the end when the scene type calls for one.
 
 ### Step 4: The Choice
 The active player chooses between two actions. The choice is presented with full transparency — both players can see the relevant stats.

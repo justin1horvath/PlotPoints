@@ -14,6 +14,7 @@ export const state = {
   },
   currentScene: 0,
   scenePhase: "none",
+  activePlayer: 1,
   currentSceneData: createEmptySceneData(),
   storyLog: [],
   aiLogSession: createAiLogSession(),
@@ -39,10 +40,26 @@ export function resetState() {
   };
   state.currentScene = 0;
   state.scenePhase = "none";
+  state.activePlayer = getRandomPlayerNumber();
   state.currentSceneData = createEmptySceneData();
   state.storyLog = [];
   state.aiLogSession = createAiLogSession();
   state.aiLog = [];
+  saveGameState();
+}
+
+// Returns the non-active player number in a two-player game.
+export function getInactivePlayerNumber() {
+  return state.activePlayer === 1 ? 2 : 1;
+}
+
+// Updates which player leads the next active-player scene activity.
+export function setActivePlayer(playerNumber) {
+  if (![1, 2].includes(playerNumber)) {
+    throw new Error(`Invalid active player: ${playerNumber}`);
+  }
+
+  state.activePlayer = playerNumber;
   saveGameState();
 }
 
@@ -69,6 +86,12 @@ export function loadSavedGameState() {
 
   try {
     Object.assign(state, JSON.parse(savedGame));
+    if (![1, 2].includes(state.activePlayer)) {
+      state.activePlayer = getRandomPlayerNumber();
+    }
+    if (!Array.isArray(state.currentSceneData.inputOrder)) {
+      state.currentSceneData.inputOrder = [];
+    }
     return state.phase !== "None";
   } catch (error) {
     console.error("Saved game could not be restored:", error);
@@ -85,6 +108,11 @@ function createAiLogSession() {
     id: `plot-point-${startedAt.replaceAll(":", "-")}`,
     startedAt,
   };
+}
+
+// Randomly selects Player 1 or Player 2.
+function getRandomPlayerNumber() {
+  return Math.random() < 0.5 ? 1 : 2;
 }
 
 // Creates the default data shape for one player's private answers and generated stats.
@@ -126,6 +154,7 @@ function createEmptySceneData() {
       player1: [],
       player2: [],
     },
+    inputOrder: [],
     narrative: "",
     storyLogEntry: null,
   };
