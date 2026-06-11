@@ -33,10 +33,11 @@ OUTPUT REQUIREMENTS
 Return valid JSON only. No markdown.
 Use strict JSON: double-quoted property names and strings, no comments, and no trailing commas.
 Inside string values, do not use double quote characters. Use apostrophes or rewrite the sentence instead.
+
 Speak in the present tense, first person. From the point of view of the active player.
 Focus on action. Showing, not telling. Use active descriptions of character actions and dialogue to reveal who they are, what they want, and how they feel.
 The narrative should be 2 short paragraphs meant to be read aloud.
-Return location and goals as structured fields, but also weave the location and both character goals naturally into the narrative text. Do not rely on separate UI boxes to explain them.
+Return location and goals as structured fields, but also weave the location and both character goals naturally into the narrative text. 
 In paragraph one, set the scene, why the character or characters are there, and what they want.
 In paragraph two, set up an obstacle to what they want. Do not resolve the obstacle yet; just create tension and stakes around it.
 The storyLogEntry should be compact memory for future scenes, not prose for players.`;

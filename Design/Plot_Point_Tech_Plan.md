@@ -314,7 +314,7 @@ Use one reusable scene prompt builder plus scene blueprints, not fourteen unrela
 
 ### Current Story Summary Plan
 
-Scene 1 now asks OpenAI to return scene content and story memory in one JSON response:
+Each Mad Lib scene asks OpenAI to return scene content and story memory in one JSON response:
 
 ```javascript
 {
@@ -469,7 +469,7 @@ function showPassScreen(message, onConfirm) {
 6. `reveal`: full narrative displayed; active player reads aloud
 7. `choice`: two buttons, each showing the relevant stat and what's at stake
 
-**Current implementation status**: Scene 1 now uses the reusable scene blueprint + prompt builder + scene type module structure. It supports two randomized private Mad Lib prompts per player and an AI-generated Ordinary World reveal. Scene choices, roll-offs, additional scene type modules, and the transition into Scene 2 are still upcoming.
+**Current implementation status**: Act 1 scenes 0 through 4 now use the reusable scene blueprint + prompt builder + scene type module structure. They are temporarily implemented as Mad Lib scenes so prompts, AI responses, and the story log can be tested across multiple scenes. Scene choices, roll-offs, and additional scene type modules are still upcoming.
 
 ---
 

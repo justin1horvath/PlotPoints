@@ -157,24 +157,24 @@ Each scene is controlled by a scene blueprint in the code. A blueprint defines t
 ### ACT 2 — The Road of Trials (6 Scenes)
 *Tone: Rising tension, growing trust, then rupture.*
 
-| # | Scene | Notes |
-|---|---|---|
-| 5 | Crossing the Threshold | Point of no return |
-| 6 | First Test | Challenge scene |
-| 7 | Second Test | The AI engineers a Turn On moment |
-| 8 | The Misunderstanding | A flaw surfaces, friction created |
-| 9 | The Ordeal | Hardest scene. Both options are difficult. |
-| 10 | The Reward | Victory in sight, something unresolved between them |
+| #   | Scene                  | Notes                                               |
+| --- | ---------------------- | --------------------------------------------------- |
+| 5   | Crossing the Threshold | Point of no return                                  |
+| 6   | First Test             | Challenge scene                                     |
+| 7   | Second Test            | The AI engineers a Turn On moment                   |
+| 8   | The Misunderstanding   | A flaw surfaces, friction created                   |
+| 9   | The Ordeal             | Hardest scene. Both options are difficult.          |
+| 10  | The Reward             | Victory in sight, something unresolved between them |
 
 ### ACT 3 — The Return (4 Scenes)
 *Tone: Vulnerable, earned, climactic.*
 
-| # | Scene | Notes |
-|---|---|---|
-| 11 | Road Back | Heading home, something unfinished |
-| 12 | The Revelation | Free Write scene (see below) |
-| 13 | Resurrection | Final obstacle, internal or external |
-| 14 | The Declaration | Final scene, spoken aloud |
+| #   | Scene           | Notes                                |
+| --- | --------------- | ------------------------------------ |
+| 11  | Road Back       | Heading home, something unfinished   |
+| 12  | The Revelation  | Free Write scene (see below)         |
+| 13  | Resurrection    | Final obstacle, internal or external |
+| 14  | The Declaration | Final scene, spoken aloud            |
 
 ---
 
@@ -183,7 +183,7 @@ Each scene is controlled by a scene blueprint in the code. A blueprint defines t
 Every scene follows the same five-step structure.
 
 **Current Web Implementation Note**
-The first implemented scene loop currently covers Scene 1 through private Mad Libs and a shared AI-generated scene reveal. Choices, roll-offs, and results are still design targets for the next build step.
+The current web implementation covers Act 1 scenes 0 through 4 as temporary Mad Lib scenes for testing prompts, AI responses, and the story log. Choices, roll-offs, and additional scene types are still design targets for later build steps.
 
 ### Step 1: App Sets the Scene
 The AI generates:

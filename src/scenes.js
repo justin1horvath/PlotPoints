@@ -9,7 +9,7 @@ export { renderPhase, renderScoreboard } from "./ui.js";
 
 // Compatibility wrapper for the current character creation flow.
 export function startFirstScene() {
-  startScene(1);
+  startScene(0);
 }
 
 // Starts the correct reusable scene flow for a blueprint.

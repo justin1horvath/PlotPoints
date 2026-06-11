@@ -257,7 +257,7 @@ export function renderCharacterReveal() {
   document
     .getElementById("begin-story-button")
     ?.addEventListener("click", () => {
-      state.phase = "Starting Scene 1";
+      state.phase = "Starting Scene 0";
       renderPhase();
       saveGameState();
       startFirstScene();

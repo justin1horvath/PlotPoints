@@ -1,5 +1,6 @@
 import { callAI } from "../ai.js";
 import { buildScenePrompt } from "../promptBuilder.js";
+import { getNextSceneNumber } from "../sceneBlueprints.js";
 import { getInactivePlayerNumber, saveGameState, state } from "../state.js";
 import { renderPhase } from "../ui.js";
 
@@ -81,6 +82,7 @@ export function renderMadLibsSceneReveal() {
   document
     .getElementById("scene-complete-button")
     ?.addEventListener("click", () => {
+      const nextSceneNumber = getNextSceneNumber(blueprint.number);
       state.phase = `Scene ${blueprint.number} Complete`;
       state.scenePhase = "complete";
       renderPhase();
@@ -88,8 +90,12 @@ export function renderMadLibsSceneReveal() {
       panel.innerHTML = `
         <div class="screen-kicker">Scene ${blueprint.number} complete</div>
         <h2>${escapeHtml(blueprint.name)} is set.</h2>
-        <p class="screen-helper">Next scene flow comes next.</p>
+        <p class="screen-helper">${getSceneCompleteMessage(nextSceneNumber)}</p>
+        ${renderNextSceneButton(nextSceneNumber)}
       `;
+      document
+        .getElementById("next-scene-button")
+        ?.addEventListener("click", () => startNextScene(nextSceneNumber));
     });
 }
 
@@ -169,6 +175,34 @@ function onMadLibsSubmit(event, playerNumber) {
   }
 
   generateMadLibsScene();
+}
+
+// Explains what happens after a scene is marked complete.
+function getSceneCompleteMessage(nextSceneNumber) {
+  if (nextSceneNumber === null) {
+    return "Act 1 test scenes are complete.";
+  }
+
+  return `Continue to Scene ${nextSceneNumber} when both players are ready.`;
+}
+
+// Builds the continue button only when another test scene exists.
+function renderNextSceneButton(nextSceneNumber) {
+  if (nextSceneNumber === null) {
+    return "";
+  }
+
+  return `<button id="next-scene-button" class="action-button" type="button">Start Scene ${nextSceneNumber}</button>`;
+}
+
+// Starts the next scene through the central scene router.
+async function startNextScene(nextSceneNumber) {
+  if (nextSceneNumber === null) {
+    return;
+  }
+
+  const { startScene } = await import("../scenes.js");
+  startScene(nextSceneNumber);
 }
 
 // Returns the saved Mad Lib input order, defaulting to active player first.
