@@ -1,6 +1,7 @@
 import { callAI } from "./ai.js";
 import { saveGameState, state } from "./state.js";
 import { renderPhase, renderScoreboard, startFirstScene } from "./scenes.js";
+import { formatStoryDirection } from "./promptBuilder.js";
 
 const CHARACTER_QUESTIONS = [
   {
@@ -68,6 +69,7 @@ export function renderCharacterQuestion() {
   const textarea = document.getElementById("character-answer");
   textarea?.focus();
   textarea?.addEventListener("input", () => {
+    // Keeps typed private answers saved if the browser reloads mid-question.
     player.answers[question.key] = textarea.value;
     saveGameState();
   });
@@ -106,6 +108,7 @@ function onCharacterAnswerSubmit(event) {
 
   if (state.characterCreation.currentPlayer === 1) {
     showPassScreen("Hand the device to Player 2.", () => {
+      // Starts Player 2 at the first private character question.
       state.characterCreation.currentPlayer = 2;
       state.characterCreation.questionIndex = 0;
       saveGameState();
@@ -192,6 +195,9 @@ Want: ${player.answers.want}`;
 
   return `Generate starting character details for Plot Point, a two-player romantic storytelling RPG.
 
+STORY DIRECTION
+${formatStoryDirection(state.storyDirection)}
+
 Do not write portraits yet.
 Do not reveal the turn on or want directly.
 Return valid JSON only. No markdown.
@@ -257,6 +263,7 @@ export function renderCharacterReveal() {
   document
     .getElementById("begin-story-button")
     ?.addEventListener("click", () => {
+      // Moves from character reveal into the first playable scene.
       state.phase = "Starting Scene 0";
       renderPhase();
       saveGameState();

@@ -6,12 +6,14 @@ import {
 } from "../schemas/characterSchema.js";
 import { SceneResponseSchema } from "../schemas/sceneSchema.js";
 
+// Creates an OpenAI client using the secret stored in the Worker environment.
 function createClient(env) {
   return new OpenAI({
     apiKey: env.OPENAI_API_KEY,
   });
 }
 
+// Chooses the configured model, falling back to the default prototype model.
 function getModel(env) {
   return env.OPENAI_MODEL || "gpt-5-mini";
 }

@@ -10,6 +10,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 export default {
+  // Handles every HTTP request that reaches the Cloudflare Worker.
   async fetch(request, env) {
     const corsHeaders = getCorsHeaders(request);
 

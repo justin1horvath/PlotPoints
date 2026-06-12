@@ -51,6 +51,7 @@ export function renderMadLibsSceneInput(playerNumber) {
   document
     .getElementById("mad-libs-form")
     ?.addEventListener("input", (event) => {
+      // Saves each field as it changes so private inputs survive a reload.
       if (!event.target.matches("input")) {
         return;
       }
@@ -82,6 +83,7 @@ export function renderMadLibsSceneReveal() {
   document
     .getElementById("scene-complete-button")
     ?.addEventListener("click", () => {
+      // Marks the reveal as finished and offers the next scene when available.
       const nextSceneNumber = getNextSceneNumber(blueprint.number);
       state.phase = `Scene ${blueprint.number} Complete`;
       state.scenePhase = "complete";
@@ -169,6 +171,7 @@ function onMadLibsSubmit(event, playerNumber) {
     state.scenePhase = "madlibs_other";
     saveGameState();
     showScenePassScreen(`Hand the device to Player ${nextPlayerNumber}.`, () => {
+      // Shows the second player's private Mad Libs after the pass screen.
       renderMadLibsSceneInput(nextPlayerNumber);
     });
     return;
@@ -279,6 +282,7 @@ async function requestSceneData(blueprint) {
       activePlayer: state.activePlayer,
       blueprint,
       players: state.players,
+      storyDirection: state.storyDirection,
       storyLog: state.storyLog,
       madLibsText: buildMadLibsPromptText(),
     }),

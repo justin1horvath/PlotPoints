@@ -3,6 +3,7 @@ export const state = {
   romanceScore: 0,
   player1Points: 0,
   player2Points: 0,
+  storyDirection: createDefaultStoryDirection(),
   players: [
     createEmptyPlayer(1),
     createEmptyPlayer(2),
@@ -29,6 +30,7 @@ export function resetState() {
   state.romanceScore = 0;
   state.player1Points = 0;
   state.player2Points = 0;
+  state.storyDirection = createDefaultStoryDirection();
   state.players = [
     createEmptyPlayer(1),
     createEmptyPlayer(2),
@@ -89,6 +91,10 @@ export function loadSavedGameState() {
     if (![1, 2].includes(state.activePlayer)) {
       state.activePlayer = getRandomPlayerNumber();
     }
+    state.storyDirection = {
+      ...createDefaultStoryDirection(),
+      ...(state.storyDirection || {}),
+    };
     if (!Array.isArray(state.currentSceneData.inputOrder)) {
       state.currentSceneData.inputOrder = [];
     }
@@ -107,6 +113,18 @@ function createAiLogSession() {
   return {
     id: `plot-point-${startedAt.replaceAll(":", "-")}`,
     startedAt,
+  };
+}
+
+// Creates the high-level story direction that every generated scene should honor.
+export function createDefaultStoryDirection() {
+  return {
+    genre: "paranormal mystery",
+    setting:
+      "New England coastal town with a history of witchcraft and strange, unexplained events",
+    antagonist: "werewolf who lusts for blood, but who hates what he turns into",
+    plot: "solve the mystery of a missing girl",
+    romanceDynamic: "rivals to lovers",
   };
 }
 

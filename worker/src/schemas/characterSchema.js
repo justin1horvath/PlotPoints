@@ -23,6 +23,7 @@ export const CharacterResponseSchema = z.object({
 // Validates game-specific stat rules after the schema shape is confirmed.
 export function validateCharacterResponse(data) {
   data.players.forEach((player) => {
+    // Confirms each player has exactly the stat spread the game expects.
     const statSpread = Object.values(player.stats).sort((a, b) => a - b).join(",");
     if (statSpread !== "2,3,3,4") {
       throw new Error(`Player ${player.number} stats must be one 2, two 3s, and one 4.`);

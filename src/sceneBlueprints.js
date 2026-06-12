@@ -1,3 +1,10 @@
+// Prompt context variables available to each scene blueprint:
+// Story: genre, setting, antagonist, plot, romanceDynamic
+// Characters: name, role, gift, physicalDetail, stats, turnOn, want
+// Put each story variable in reveal, hint, or subtext.
+// Put each character variable under characters.active or characters.other, then in reveal, hint, or subtext.
+// Omitted variables are not sent to the model.
+
 const DEFAULT_MADLIB_RULES = {
   promptsPerPlayer: 2,
   madLibAssignment: "split_random",
@@ -11,9 +18,28 @@ export const SCENE_BLUEPRINTS = [
     name: "Cold Open",
     act: 1,
     type: "madlibs_scene",
+    promptContext: {
+      story: {
+        reveal: ["genre", "setting"],
+        hint: ["plot", "antagonist"],
+        subtext: [],
+      },
+      characters: {
+        active: {
+          reveal: [],
+          hint: [],
+          subtext: [],
+        },
+        other: {
+          reveal: [],
+          hint: [],
+          subtext: [],
+        },
+      },
+    },
     description:
-      "Open with a bold, cinematic tease of the main plot. Hint at the primary conflict.",
-    tone: "Romantic, punchy, mysterious, and concise.",
+      "Open with a dramtic cliffhanger sceene that grabs thre players attention. Set up the plot without revealing too much.",
+    tone: "Dramatic",
     rules: {
       ...DEFAULT_MADLIB_RULES,
       charactersMeet: false,
@@ -21,14 +47,14 @@ export const SCENE_BLUEPRINTS = [
     madLibs: {
       promptPool: [
         {
-          key: "ominousObject",
-          label: "An ominous object",
-          placeholder: "a cracked mirror, a red glove, a sealed letter...",
+          key: "location",
+          label: "Location",
+          placeholder: "a shadowy alley, a windswept cliff, a locked room...",
         },
         {
-          key: "publicPlace",
-          label: "A public place",
-          placeholder: "a train platform, a moonlit ballroom...",
+          key: "intrigue",
+          label: "Something intriguing",
+          placeholder: "whos in danger, what's at stake, what's unusual about the situation...",
         },
         {
           key: "dangerousAction",
@@ -44,9 +70,10 @@ export const SCENE_BLUEPRINTS = [
     },
     constraints: [
       "Create a brief teaser scene, not the full beginning of the plot.",
-      "Hint at both main characters without explaining their backstories.",
-      "The characters should not meet yet.",
-      "Use all four Mad Libs inputs naturally.",
+      "Describe the setting in a few vivid detials",
+      "Hint at the plot and the antogonist without being explicit.",
+      "Mad Libs may be dialogue, sensory detail, or action — weave them as the type they imply, not as labels to check off.",
+      "If a Mad Libs input overlaps with or contradicts established story or character details, subordinate it to the story — use it as a detail within that world, not as a replacement for it",
       "Do not include a roll-off, choice, or resolved dilemma yet.",
     ],
   },
@@ -55,6 +82,25 @@ export const SCENE_BLUEPRINTS = [
     name: "Ordinary World",
     act: 1,
     type: "madlibs_scene",
+    promptContext: {
+      story: {
+        reveal: ["genre", "setting"],
+        hint: ["plot"],
+        subtext: ["romanceDynamic"],
+      },
+      characters: {
+        active: {
+          reveal: ["name", "role", "gift", "physicalDetail", "stats"],
+          hint: ["turnOn"],
+          subtext: [],
+        },
+        other: {
+          reveal: ["name", "role", "gift", "physicalDetail", "stats"],
+          hint: ["turnOn"],
+          subtext: [],
+        },
+      },
+    },
     description:
       "Show what each character's normal life looks like before the adventure fully begins. The scene should reveal habits, pressures, and emotional gaps.",
     tone: "Playful, vivid, emotionally observant, with a hint of longing.",
@@ -99,6 +145,25 @@ export const SCENE_BLUEPRINTS = [
     name: "The Meeting",
     act: 1,
     type: "madlibs_scene",
+    promptContext: {
+      story: {
+        reveal: ["genre", "setting"],
+        hint: ["plot"],
+        subtext: ["romanceDynamic"],
+      },
+      characters: {
+        active: {
+          reveal: ["name", "role", "gift", "physicalDetail", "stats"],
+          hint: ["turnOn"],
+          subtext: [],
+        },
+        other: {
+          reveal: ["name", "role", "gift", "physicalDetail", "stats"],
+          hint: ["turnOn"],
+          subtext: [],
+        },
+      },
+    },
     description:
       "Bring both characters into the same scene for the first time. Their meeting should create immediate friction, curiosity, or attraction without settling what they mean to each other.",
     tone: "Charged, charming, awkward, and specific.",
@@ -143,6 +208,25 @@ export const SCENE_BLUEPRINTS = [
     name: "Call to Adventure",
     act: 1,
     type: "madlibs_scene",
+    promptContext: {
+      story: {
+        reveal: ["genre", "setting", "plot"],
+        hint: ["antagonist"],
+        subtext: ["romanceDynamic"],
+      },
+      characters: {
+        active: {
+          reveal: ["name", "role", "gift", "physicalDetail", "stats"],
+          hint: ["turnOn"],
+          subtext: [],
+        },
+        other: {
+          reveal: ["name", "role", "gift", "physicalDetail", "stats"],
+          hint: ["turnOn"],
+          subtext: [],
+        },
+      },
+    },
     description:
       "Introduce the quest, problem, invitation, or opportunity that pulls the characters out of normal life. The call should make cooperation useful, inconvenient, or unavoidable.",
     tone: "Urgent, enticing, and a little theatrical.",
@@ -187,6 +271,25 @@ export const SCENE_BLUEPRINTS = [
     name: "Refusal",
     act: 1,
     type: "madlibs_scene",
+    promptContext: {
+      story: {
+        reveal: ["genre", "setting", "plot"],
+        hint: ["antagonist"],
+        subtext: ["romanceDynamic"],
+      },
+      characters: {
+        active: {
+          reveal: ["name", "role", "gift", "physicalDetail", "stats"],
+          hint: ["turnOn"],
+          subtext: [],
+        },
+        other: {
+          reveal: ["name", "role", "gift", "physicalDetail", "stats"],
+          hint: ["turnOn"],
+          subtext: [],
+        },
+      },
+    },
     description:
       "Show why the characters hesitate, resist, or complicate the call. Their refusal should reveal fear, pride, duty, desire, or a reason they cannot simply say yes.",
     tone: "Tense, intimate, restrained, and character-driven.",
