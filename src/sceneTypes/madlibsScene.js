@@ -255,6 +255,7 @@ async function generateMadLibsScene() {
       ...state.currentSceneData,
       ...sceneData,
     };
+    updateCharacterGoals(sceneData);
     addSceneToStoryLog(blueprint, sceneData);
     state.scenePhase = "reveal";
     state.phase = `Scene ${blueprint.number} Reveal`;
@@ -284,7 +285,7 @@ async function requestSceneData(blueprint) {
       players: state.players,
       storyDirection: state.storyDirection,
       storyLog: state.storyLog,
-      madLibsText: buildMadLibsPromptText(),
+      madLibs: buildMadLibsPromptValues(),
     }),
     maxOutputTokens: SCENE_MAX_OUTPUT_TOKENS,
   });
@@ -305,6 +306,12 @@ function addSceneToStoryLog(blueprint, sceneData) {
   });
 }
 
+// Rewrites each character's current goal from the AI's latest scene response.
+function updateCharacterGoals(sceneData) {
+  state.players[0].goal = sceneData.goals.player1;
+  state.players[1].goal = sceneData.goals.player2;
+}
+
 // Randomly assigns Mad Lib prompt types using the blueprint's rules.
 function createMadLibAssignments(blueprint) {
   if (blueprint.rules.madLibAssignment !== "split_random") {
@@ -313,14 +320,29 @@ function createMadLibAssignments(blueprint) {
 
   const promptsPerPlayer = blueprint.rules.promptsPerPlayer;
   const totalNeeded = promptsPerPlayer * 2;
+  const requiredFields = getRequiredMadLibFields(blueprint);
 
-  if (blueprint.madLibs.promptPool.length < totalNeeded) {
+  if (requiredFields.length > totalNeeded) {
+    throw new Error(
+      `Scene ${blueprint.number} references ${requiredFields.length} Mad Lib prompts in its description, but only collects ${totalNeeded}.`
+    );
+  }
+
+  const remainingFields = blueprint.madLibs.promptPool.filter(
+    (field) => !requiredFields.some((requiredField) => requiredField.key === field.key)
+  );
+  const selectedFields = [
+    ...requiredFields,
+    ...shuffleArray(remainingFields).slice(0, totalNeeded - requiredFields.length),
+  ];
+
+  if (selectedFields.length < totalNeeded) {
     throw new Error(
       `Scene ${blueprint.number} needs at least ${totalNeeded} Mad Lib prompts.`
     );
   }
 
-  const shuffledFields = shuffleArray(blueprint.madLibs.promptPool);
+  const shuffledFields = shuffleArray(selectedFields);
 
   return {
     player1: shuffledFields.slice(0, promptsPerPlayer).map((field) => field.key),
@@ -328,6 +350,28 @@ function createMadLibAssignments(blueprint) {
       .slice(promptsPerPlayer, promptsPerPlayer * 2)
       .map((field) => field.key),
   };
+}
+
+// Finds Mad Lib prompt definitions that are referenced directly by the scene description.
+function getRequiredMadLibFields(blueprint) {
+  const requiredKeys = getMadLibKeysFromDescription(blueprint.description);
+
+  return requiredKeys.map((key) => {
+    const field = blueprint.madLibs.promptPool.find((promptField) => promptField.key === key);
+
+    if (!field) {
+      throw new Error(`Scene ${blueprint.number} references unknown Mad Lib key: ${key}`);
+    }
+
+    return field;
+  });
+}
+
+// Extracts every {madlibs.key} placeholder from a scene description.
+function getMadLibKeysFromDescription(description) {
+  return [...description.matchAll(/\{madlibs\.([^}]+)\}/g)].map((match) =>
+    match[1].trim()
+  );
 }
 
 // Returns the prompt definitions assigned to one player for this scene.
@@ -342,23 +386,26 @@ function getAssignedMadLibFields(playerNumber) {
     .filter(Boolean);
 }
 
-// Formats both players' answered Mad Libs for the scene prompt.
-function buildMadLibsPromptText() {
-  return [1, 2]
-    .map((playerNumber) => {
-      return `Player ${playerNumber} Mad Libs:
-${formatPlayerMadLibs(playerNumber)}`;
-    })
-    .join("\n\n");
+// Builds keyed Mad Lib values so scene descriptions can reference exact inputs.
+function buildMadLibsPromptValues() {
+  return [1, 2].reduce((values, playerNumber) => {
+    return {
+      ...values,
+      ...getPlayerMadLibValues(playerNumber),
+    };
+  }, {});
 }
 
-// Formats one player's answered Mad Libs for the scene prompt.
-function formatPlayerMadLibs(playerNumber) {
+// Returns one player's answered Mad Libs as key/value pairs.
+function getPlayerMadLibValues(playerNumber) {
   const inputs = state.currentSceneData.madLibsInputs[`player${playerNumber}`];
 
-  return getAssignedMadLibFields(playerNumber)
-    .map((field) => `${field.label}: ${inputs[field.key]}`)
-    .join("\n");
+  return Object.fromEntries(
+    getAssignedMadLibFields(playerNumber).map((field) => [
+      field.key,
+      inputs[field.key],
+    ])
+  );
 }
 
 // Returns a shuffled copy of an array without changing the original.

@@ -95,6 +95,10 @@ export function loadSavedGameState() {
       ...createDefaultStoryDirection(),
       ...(state.storyDirection || {}),
     };
+    state.players = state.players.map((player) => ({
+      ...createEmptyPlayer(player.number),
+      ...player,
+    }));
     if (!Array.isArray(state.currentSceneData.inputOrder)) {
       state.currentSceneData.inputOrder = [];
     }
@@ -145,6 +149,7 @@ function createEmptyPlayer(number) {
     },
     name: "",
     physicalDetail: "",
+    goal: "",
     stats: {
       guts: 0,
       charm: 0,
