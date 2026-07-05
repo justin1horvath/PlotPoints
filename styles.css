@@ -156,6 +156,23 @@ body::before {
   text-transform: uppercase;
 }
 
+.scene-brief {
+  margin: 0 0 24px;
+  color: #dedbd0;
+  line-height: 1.55;
+}
+
+.scene-number-heading {
+  margin-bottom: 8px;
+}
+
+.scene-player-heading {
+  margin: 0 0 28px;
+  color: #dedbd0;
+  font-size: 1.55rem;
+  line-height: 1.18;
+}
+
 .screen-helper {
   margin-bottom: 16px;
   color: #cfcbbd;
@@ -212,6 +229,10 @@ body::before {
   justify-content: space-between;
   gap: 12px;
   color: #bfb9a7;
+}
+
+.mad-libs-form .form-footer {
+  justify-content: flex-end;
 }
 
 .form-footer .action-button,

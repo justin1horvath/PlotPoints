@@ -141,7 +141,7 @@ ROMANCE SCORE    ENDING
 
 The game consists of **14 scenes** across three acts, following the Hero's Journey framework.
 
-Each scene is controlled by a scene blueprint in the code. A blueprint defines the scene number, name, purpose, tone, app-only rules, player input prompts, and AI constraints. The current implemented interaction type is `madlibs_scene`: each player privately answers two randomized prompts, then the AI uses those inputs plus the scene constraints to write the reveal.
+Each scene is controlled by a scene blueprint in the code. A blueprint defines the scene number, name, purpose, tone, app-only rules, active-player input prompts, other-player input prompts, and AI constraints. The current implemented interaction type is `madlibs_scene`: each player privately answers the prompts assigned to their scene role, then the AI uses those inputs plus the scene constraints to write the reveal.
 
 ### ACT 1 — The Ordinary World (4 Scenes)
 *Tone: Playful, establishing. Players are getting comfortable.*
@@ -194,9 +194,9 @@ The AI generates:
 These details are woven into the scene narration. They are not displayed as separate player-facing text boxes.
 
 ### Step 2: Mad Libs
-Before the scene is revealed, the AI asks each player privately for two blind inputs. The active player answers first, then the other player answers after a pass screen. The app randomly assigns each player two prompts from the shared prompt pool, and randomizes the order in which those prompts appear. The prompts are set by the scene blueprint file.
+Before the scene is revealed, the app asks each player privately for blind inputs. The active player answers first, then the other player answers after a pass screen. Each scene blueprint explicitly lists the active player's prompts and the other player's prompts, so the scene designer controls what kind of story material each player contributes.
 
-Neither player knows how their inputs will be used. The AI weaves all four total inputs into the scene narrative.
+Neither player knows how their inputs will be used. The AI weaves the submitted inputs into the scene narrative.
 
 ### Step 3: Scene Reveal
 The active player reads the full scene aloud to both players. A dilemma lands at the end when the scene type calls for one.

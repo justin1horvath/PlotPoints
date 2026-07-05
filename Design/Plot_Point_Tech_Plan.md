@@ -131,14 +131,15 @@ Every scene-generation prompt should be built from five sources:
 
 3. **Story So Far**
    - Lives in `state.storyLog`.
-   - Should be compact structured memory, not the full text of every scene.
+   - Sends the labeled `summary` from every completed scene, not full scene text or the other story-log fields.
    - Each completed scene should store a summary, emotional shift, important facts, unresolved threads, and romance beat.
+   - Each scene blueprint decides whether to include romance context and selects which character fields may be revealed or used only as subtext. Omitted fields are not sent in the character context block.
    - Preferred strategy: ask OpenAI to return a `storyLogEntry` as part of the same scene-generation response. This avoids an extra summary API call while still preserving emotional continuity.
 
 4. **Scene Blueprint**
    - Implemented file: `src/sceneBlueprints.js`.
    - Defines what each scene number is supposed to do.
-   - Includes act, scene name, scene type, description, tone, app rules, Mad Lib prompt pool, and AI constraints.
+   - Includes act, scene name, scene type, description, ordered beats, Mad Lib input roles, paragraph count, tone, prompt context, app rules, active-player Mad Lib prompts, other-player Mad Lib prompts, and AI constraints.
    - `type` and `rules` are used by the JavaScript app to choose the scene flow and UI behavior.
    - `constraints` are sent to the AI model so it knows what the generated scene must do or avoid.
    - The current implemented scene type is `madlibs_scene`, implemented in `src/sceneTypes/madlibsScene.js`. Future scene types should get their own files in `src/sceneTypes/` and be registered once in `src/scenes.js`.
@@ -146,7 +147,7 @@ Every scene-generation prompt should be built from five sources:
 5. **Player Inputs**
    - Lives in `state.currentSceneData.madLibsInputs`.
    - Includes the blind Mad Libs words supplied privately by each player.
-   - For the current scene loop, the app randomly assigns two prompt types to each player from the shared four-prompt pool and randomizes each player's prompt order.
+   - For the current scene loop, each blueprint explicitly defines which prompts the active player answers and which prompts the other player answers.
    - Later scenes may also include choices, Free Write text, plot twist selections, and clue spending.
 
 ### Prompt Builder
@@ -181,7 +182,7 @@ STORY SO FAR
 [compact scene summaries]
 
 CURRENT SCENE BLUEPRINT
-[scene number, description, tone, constraints]
+[scene number, description, ordered beats, input roles, tone, constraints]
 
 PLAYER MAD LIBS
 [player 1 inputs]
@@ -191,7 +192,7 @@ OUTPUT FORMAT
 Return strict JSON only...
 ```
 
-For Scene 1, `scenes.js` now calls a reusable `startScene(sceneNumber)` function. That function looks up the blueprint, uses the app-only `type` to choose the scene type handler, then delegates the interaction to `src/sceneTypes/madlibsScene.js`. The Mad Libs scene handler uses the app-only `rules`, collects randomized Mad Lib inputs, builds the prompt from the scene description and AI constraints, asks the Worker for validated JSON, stores the returned `storyLogEntry`, and renders the reveal.
+For Scene 1, `scenes.js` now calls a reusable `startScene(sceneNumber)` function. That function looks up the blueprint, uses the app-only `type` to choose the scene type handler, then delegates the interaction to `src/sceneTypes/madlibsScene.js`. The Mad Libs scene handler uses the blueprint's active-player and other-player prompt lists, collects those private inputs, builds the prompt from the scene description and AI constraints, asks the Worker for validated JSON, stores the returned `storyLogEntry`, and renders the reveal.
 
 ### Structured Output Contracts
 
@@ -205,8 +206,16 @@ const SceneSchema = z.object({
   location: z.string(),
   setup: z.string(),
   goals: z.object({
-    player1: z.string(),
-    player2: z.string(),
+    player1: z.string().nullable(),
+    player2: z.string().nullable(),
+  }),
+  scenePlan: z.object({
+    purpose: z.string(),
+    activeObjective: z.string(),
+    otherObjective: z.string().nullable(),
+    conflict: z.string(),
+    beats: z.array(z.string()).min(3).max(6),
+    endingChange: z.string(),
   }),
   narrative: z.string(),
   storyLogEntry: z.object({
@@ -321,7 +330,15 @@ Each Mad Lib scene asks OpenAI to return scene content and story memory in one J
   title: "",
   location: "",
   setup: "",
-  goals: { player1: "", player2: "" },
+  goals: { player1: "", player2: null },
+  scenePlan: {
+    purpose: "",
+    activeObjective: "",
+    otherObjective: null,
+    conflict: "",
+    beats: ["", "", ""],
+    endingChange: ""
+  },
   narrative: "",
   storyLogEntry: {
     summary: "",
@@ -463,8 +480,8 @@ function showPassScreen(message, onConfirm) {
 
 1. Build scene type modules under `src/sceneTypes/`. `scenes.js` should stay a small router that maps blueprint `type` values to the correct module.
 2. `setup`: call the Worker with scene number + game state → provider adapter returns validated scene data
-3. `madlibs_active`: the active player privately answers two randomized prompts from the Mad Libs pool → pass screen
-4. `madlibs_other`: the other player privately answers the remaining two randomized prompts → pass screen
+3. `madlibs_active`: the active player privately answers the prompts listed under `activePlayerPrompts` → pass screen
+4. `madlibs_other`: the other player privately answers the prompts listed under `otherPlayerPrompts` → pass screen
 5. Call the Worker with all 4 inputs + scene context → returns woven narrative ending in a dilemma
 6. `reveal`: full narrative displayed; active player reads aloud
 7. `choice`: two buttons, each showing the relevant stat and what's at stake

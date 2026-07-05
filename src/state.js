@@ -4,6 +4,7 @@ export const state = {
   player1Points: 0,
   player2Points: 0,
   storyDirection: createDefaultStoryDirection(),
+  storyMemory: createEmptyStoryMemory(),
   players: [
     createEmptyPlayer(1),
     createEmptyPlayer(2),
@@ -31,6 +32,7 @@ export function resetState() {
   state.player1Points = 0;
   state.player2Points = 0;
   state.storyDirection = createDefaultStoryDirection();
+  state.storyMemory = createEmptyStoryMemory();
   state.players = [
     createEmptyPlayer(1),
     createEmptyPlayer(2),
@@ -95,6 +97,10 @@ export function loadSavedGameState() {
       ...createDefaultStoryDirection(),
       ...(state.storyDirection || {}),
     };
+    state.storyMemory = {
+      ...createEmptyStoryMemory(),
+      ...(state.storyMemory || {}),
+    };
     state.players = state.players.map((player) => ({
       ...createEmptyPlayer(player.number),
       ...player,
@@ -130,6 +136,75 @@ export function createDefaultStoryDirection() {
     plot: "solve the mystery of a missing girl",
     romanceDynamic: "rivals to lovers",
   };
+}
+
+// Creates the evolving story memory that future scene prompts can reference.
+export function createEmptyStoryMemory() {
+  return {
+    currentSituation: "",
+    establishedFacts: [],
+    unresolvedMysteries: [],
+    activeThreats: [],
+    relationshipState: "",
+    openPromises: [],
+  };
+}
+
+// Applies one validated scene delta without discarding untouched story continuity.
+export function mergeStoryMemory(currentMemory, updates) {
+  return {
+    currentSituation:
+      updates.currentSituation?.trim() || currentMemory.currentSituation,
+    establishedFacts: applyMemoryListUpdates(
+      currentMemory.establishedFacts,
+      updates.establishedFacts?.add,
+      updates.establishedFacts?.remove
+    ),
+    unresolvedMysteries: applyMemoryListUpdates(
+      currentMemory.unresolvedMysteries,
+      updates.unresolvedMysteries?.add,
+      updates.unresolvedMysteries?.resolve
+    ),
+    activeThreats: applyMemoryListUpdates(
+      currentMemory.activeThreats,
+      updates.activeThreats?.add,
+      updates.activeThreats?.resolve
+    ),
+    relationshipState:
+      updates.relationshipState?.trim() || currentMemory.relationshipState,
+    openPromises: applyMemoryListUpdates(
+      currentMemory.openPromises,
+      updates.openPromises?.add,
+      updates.openPromises?.resolve
+    ),
+  };
+}
+
+// Removes resolved entries by normalized exact text, then appends unique additions.
+function applyMemoryListUpdates(currentItems = [], additions = [], removals = []) {
+  const removalKeys = new Set(removals.map(normalizeMemoryItem));
+  const retainedItems = currentItems.filter(
+    (item) => !removalKeys.has(normalizeMemoryItem(item))
+  );
+  const mergedItems = [...retainedItems];
+  const mergedKeys = new Set(mergedItems.map(normalizeMemoryItem));
+
+  additions.forEach((item) => {
+    const trimmedItem = item.trim();
+    const normalizedItem = normalizeMemoryItem(trimmedItem);
+
+    if (trimmedItem && !mergedKeys.has(normalizedItem)) {
+      mergedItems.push(trimmedItem);
+      mergedKeys.add(normalizedItem);
+    }
+  });
+
+  return mergedItems;
+}
+
+// Makes list comparisons insensitive to capitalization and surrounding whitespace.
+function normalizeMemoryItem(item = "") {
+  return item.trim().toLowerCase();
 }
 
 // Randomly selects Player 1 or Player 2.
@@ -169,6 +244,7 @@ function createEmptySceneData() {
       player1: "",
       player2: "",
     },
+    scenePlan: null,
     madLibsInputs: {
       player1: createEmptyMadLibs(),
       player2: createEmptyMadLibs(),

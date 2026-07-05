@@ -1,7 +1,12 @@
 import { callAI } from "../ai.js";
 import { buildScenePrompt } from "../promptBuilder.js";
 import { getNextSceneNumber } from "../sceneBlueprints.js";
-import { getInactivePlayerNumber, saveGameState, state } from "../state.js";
+import {
+  getInactivePlayerNumber,
+  mergeStoryMemory,
+  saveGameState,
+  state,
+} from "../state.js";
 import { renderPhase } from "../ui.js";
 
 const SCENE_MAX_OUTPUT_TOKENS = 6000;
@@ -30,18 +35,17 @@ export function renderMadLibsSceneInput(playerNumber) {
   const scene = state.currentSceneData;
   const inputs = scene.madLibsInputs[`player${playerNumber}`];
   const assignedFields = getAssignedMadLibFields(playerNumber);
-  const inputOrder = getMadLibInputOrder();
-  const isActivePlayer = playerNumber === state.activePlayer;
-  const turnLabel = isActivePlayer ? "Active player first" : "Second player";
+  const playerBrief = scene.blueprint.playerBrief
+    ? `<p class="scene-brief">${escapeHtml(scene.blueprint.playerBrief)}</p>`
+    : "";
 
   panel.innerHTML = `
-    <div class="screen-kicker">Scene ${scene.blueprint.number} private Mad Libs</div>
-    <h2>Player ${playerNumber}, add ingredients</h2>
-    <p class="screen-helper">${turnLabel}. Answer your ${assignedFields.length} prompts. They will be woven into the scene, and the other player should not see them.</p>
+    <h2 class="scene-number-heading">Scene ${scene.blueprint.number}:</h2>
+    ${playerBrief}
+    <p class="scene-player-heading"><strong>Player ${playerNumber}</strong>, add scene ingredients.</p>
     <form id="mad-libs-form" class="mad-libs-form">
       ${assignedFields.map((field) => renderMadLibField(field, inputs)).join("")}
       <div class="form-footer">
-        <span>Input ${inputOrder.indexOf(playerNumber) + 1} of ${inputOrder.length}</span>
         <button class="action-button" type="submit">Save Inputs</button>
       </div>
     </form>
@@ -112,6 +116,7 @@ function createSceneDataFromBlueprint(blueprint, madLibAssignments, inputOrder) 
       player1: "",
       player2: "",
     },
+    scenePlan: null,
     madLibsInputs: createMadLibInputState(blueprint),
     assignedMadLibFields: madLibAssignments,
     inputOrder,
@@ -120,10 +125,10 @@ function createSceneDataFromBlueprint(blueprint, madLibAssignments, inputOrder) 
   };
 }
 
-// Creates blank Mad Lib answer storage for every prompt in the blueprint pool.
+// Creates blank Mad Lib answer storage for every prompt in the blueprint lists.
 function createMadLibInputState(blueprint) {
   const blankAnswers = Object.fromEntries(
-    blueprint.madLibs.promptPool.map((field) => [field.key, ""])
+    getAllMadLibFields(blueprint).map((field) => [field.key, ""])
   );
 
   return {
@@ -183,7 +188,7 @@ function onMadLibsSubmit(event, playerNumber) {
 // Explains what happens after a scene is marked complete.
 function getSceneCompleteMessage(nextSceneNumber) {
   if (nextSceneNumber === null) {
-    return "Act 1 test scenes are complete.";
+    return "The story is complete.";
   }
 
   return `Continue to Scene ${nextSceneNumber} when both players are ready.`;
@@ -251,11 +256,13 @@ async function generateMadLibsScene() {
 
   try {
     const sceneData = await requestSceneData(blueprint);
+    const updatedStoryMemory = updateStoryMemory(sceneData);
     state.currentSceneData = {
       ...state.currentSceneData,
       ...sceneData,
+      storyMemory: updatedStoryMemory,
     };
-    updateCharacterGoals(sceneData);
+    updateCharacterGoals(sceneData, blueprint);
     addSceneToStoryLog(blueprint, sceneData);
     state.scenePhase = "reveal";
     state.phase = `Scene ${blueprint.number} Reveal`;
@@ -285,6 +292,7 @@ async function requestSceneData(blueprint) {
       players: state.players,
       storyDirection: state.storyDirection,
       storyLog: state.storyLog,
+      storyMemory: state.storyMemory,
       madLibs: buildMadLibsPromptValues(),
     }),
     maxOutputTokens: SCENE_MAX_OUTPUT_TOKENS,
@@ -298,6 +306,8 @@ function addSceneToStoryLog(blueprint, sceneData) {
     sceneName: blueprint.name,
     title: sceneData.title,
     ...sceneData.storyLogEntry,
+    storyMemoryUpdates: sceneData.storyMemoryUpdates,
+    storyMemory: state.storyMemory,
     mechanicalResult: {
       winner: null,
       romanceScoreChange: 0,
@@ -306,71 +316,117 @@ function addSceneToStoryLog(blueprint, sceneData) {
   });
 }
 
-// Rewrites each character's current goal from the AI's latest scene response.
-function updateCharacterGoals(sceneData) {
-  state.players[0].goal = sceneData.goals.player1;
-  state.players[1].goal = sceneData.goals.player2;
+// Applies the scene's explicit memory delta while preserving untouched continuity.
+function updateStoryMemory(sceneData) {
+  const updates = sceneData.storyMemoryUpdates;
+
+  if (!updates) {
+    return state.storyMemory;
+  }
+
+  state.storyMemory = mergeStoryMemory(state.storyMemory, updates);
+
+  return state.storyMemory;
 }
 
-// Randomly assigns Mad Lib prompt types using the blueprint's rules.
-function createMadLibAssignments(blueprint) {
-  if (blueprint.rules.madLibAssignment !== "split_random") {
-    throw new Error(`Unsupported Mad Lib assignment: ${blueprint.rules.madLibAssignment}`);
+// Rewrites goals only for characters who participate in the current scene.
+function updateCharacterGoals(sceneData, blueprint) {
+  const participantNumbers = [state.activePlayer];
+
+  if (blueprint.promptContext?.otherPlayer) {
+    participantNumbers.push(getInactivePlayerNumber());
   }
 
-  const promptsPerPlayer = blueprint.rules.promptsPerPlayer;
-  const totalNeeded = promptsPerPlayer * 2;
-  const requiredFields = getRequiredMadLibFields(blueprint);
+  participantNumbers.forEach((playerNumber) => {
+    const updatedGoal = sceneData.goals[`player${playerNumber}`];
 
-  if (requiredFields.length > totalNeeded) {
-    throw new Error(
-      `Scene ${blueprint.number} references ${requiredFields.length} Mad Lib prompts in its description, but only collects ${totalNeeded}.`
-    );
-  }
-
-  const remainingFields = blueprint.madLibs.promptPool.filter(
-    (field) => !requiredFields.some((requiredField) => requiredField.key === field.key)
-  );
-  const selectedFields = [
-    ...requiredFields,
-    ...shuffleArray(remainingFields).slice(0, totalNeeded - requiredFields.length),
-  ];
-
-  if (selectedFields.length < totalNeeded) {
-    throw new Error(
-      `Scene ${blueprint.number} needs at least ${totalNeeded} Mad Lib prompts.`
-    );
-  }
-
-  const shuffledFields = shuffleArray(selectedFields);
-
-  return {
-    player1: shuffledFields.slice(0, promptsPerPlayer).map((field) => field.key),
-    player2: shuffledFields
-      .slice(promptsPerPlayer, promptsPerPlayer * 2)
-      .map((field) => field.key),
-  };
-}
-
-// Finds Mad Lib prompt definitions that are referenced directly by the scene description.
-function getRequiredMadLibFields(blueprint) {
-  const requiredKeys = getMadLibKeysFromDescription(blueprint.description);
-
-  return requiredKeys.map((key) => {
-    const field = blueprint.madLibs.promptPool.find((promptField) => promptField.key === key);
-
-    if (!field) {
-      throw new Error(`Scene ${blueprint.number} references unknown Mad Lib key: ${key}`);
+    if (typeof updatedGoal === "string" && updatedGoal.trim()) {
+      state.players[playerNumber - 1].goal = updatedGoal;
     }
-
-    return field;
   });
 }
 
-// Extracts every {madlibs.key} placeholder from a scene description.
-function getMadLibKeysFromDescription(description) {
-  return [...description.matchAll(/\{madlibs\.([^}]+)\}/g)].map((match) =>
-    match[1].trim()
+// Assigns each blueprint prompt list to the player role it was written for.
+function createMadLibAssignments(blueprint) {
+  validateMadLibPromptLists(blueprint);
+
+  const activePromptKeys = blueprint.madLibs.activePlayerPrompts.map(
+    (field) => field.key
+  );
+  const otherPromptKeys = blueprint.madLibs.otherPlayerPrompts.map((field) => field.key);
+
+  return {
+    [`player${state.activePlayer}`]: activePromptKeys,
+    [`player${getInactivePlayerNumber()}`]: otherPromptKeys,
+  };
+}
+
+// Confirms the scene templates, prompt lists, and input roles agree before play starts.
+function validateMadLibPromptLists(blueprint) {
+  const requiredKeys = getMadLibKeysFromBlueprint(blueprint);
+  const allFields = getAllMadLibFields(blueprint);
+  const allKeys = allFields.map((field) => field.key);
+  const inputRoleKeys = Object.keys(blueprint.inputRoles || {});
+  const duplicateKeys = allKeys.filter((key, index) => allKeys.indexOf(key) !== index);
+
+  if (duplicateKeys.length) {
+    throw new Error(
+      `Scene ${blueprint.number} has duplicate Mad Lib prompt keys: ${[
+        ...new Set(duplicateKeys),
+      ].join(", ")}`
+    );
+  }
+
+  requiredKeys.forEach((key) => {
+    if (!allKeys.includes(key)) {
+      throw new Error(`Scene ${blueprint.number} references unknown Mad Lib key: ${key}`);
+    }
+  });
+
+  const unusedKeys = allKeys.filter((key) => !requiredKeys.includes(key));
+
+  if (unusedKeys.length) {
+    throw new Error(
+      `Scene ${blueprint.number} does not use these Mad Lib prompts in its task or beats: ${unusedKeys.join(", ")}`
+    );
+  }
+
+  const missingRoles = allKeys.filter((key) => !inputRoleKeys.includes(key));
+  const unknownRoles = inputRoleKeys.filter((key) => !allKeys.includes(key));
+
+  if (missingRoles.length || unknownRoles.length) {
+    throw new Error(
+      `Scene ${blueprint.number} Mad Lib input roles do not match its prompts. Missing: ${
+        missingRoles.join(", ") || "none"
+      }. Unknown: ${unknownRoles.join(", ") || "none"}.`
+    );
+  }
+
+  inputRoleKeys.forEach((key) => {
+    const role = blueprint.inputRoles[key];
+
+    if (
+      !["plot-driving", "supporting"].includes(role?.influence) ||
+      typeof role?.purpose !== "string" ||
+      !role.purpose.trim()
+    ) {
+      throw new Error(`Scene ${blueprint.number} has an invalid input role for ${key}.`);
+    }
+  });
+}
+
+// Returns every prompt field listed for either player role in blueprint order.
+function getAllMadLibFields(blueprint) {
+  return [
+    ...(blueprint.madLibs.activePlayerPrompts || []),
+    ...(blueprint.madLibs.otherPlayerPrompts || []),
+  ];
+}
+
+// Extracts every {madlibs.key} placeholder from a scene's task and beats.
+function getMadLibKeysFromBlueprint(blueprint) {
+  return [blueprint.description, ...(blueprint.beats || [])].flatMap((template) =>
+    [...template.matchAll(/\{madlibs\.([^}]+)\}/g)].map((match) => match[1].trim())
   );
 }
 
@@ -382,7 +438,7 @@ function getAssignedMadLibFields(playerNumber) {
     [];
 
   return assignedKeys
-    .map((key) => blueprint.madLibs.promptPool.find((field) => field.key === key))
+    .map((key) => getAllMadLibFields(blueprint).find((field) => field.key === key))
     .filter(Boolean);
 }
 
@@ -406,21 +462,6 @@ function getPlayerMadLibValues(playerNumber) {
       inputs[field.key],
     ])
   );
-}
-
-// Returns a shuffled copy of an array without changing the original.
-function shuffleArray(items) {
-  const shuffled = [...items];
-
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
-    [shuffled[index], shuffled[randomIndex]] = [
-      shuffled[randomIndex],
-      shuffled[index],
-    ];
-  }
-
-  return shuffled;
 }
 
 // Splits generated scene text into safe HTML paragraphs.
